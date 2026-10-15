@@ -68,7 +68,8 @@ You're editing the template, tooling, or research here. Rules:
   `git config core.hooksPath tooling/hooks`). User/project-specific literals (other private repo
   names, personal emails) go in a **git-ignored** `.pii-denylist.local` at the repo root — never
   commit it. Run manually anytime: `python3 tooling/pii-scan.py [--range origin/main..HEAD]`.
-  False positive? Add the safe substring to `ALLOW` in `pii-scan.py`.
+  False positive? Add the safe substring to a gitignored `.pii-allow.local` at the repo root (or to
+  `ALLOW` in `pii-scan.py` if it is generic to every user).
 - **The research is fact-checked, and `research/` is published.** Claims here were adversarially
   verified: don't add one without a primary source, and preserve the "hedges / refuted claims"
   honesty. Everything in `research/` must also be **project-agnostic and PII-free** — it ships to

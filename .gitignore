@@ -17,6 +17,7 @@ tooling/kb-eval/results/
 
 # PII scan: user-specific denylist stays LOCAL — never commit to the public repo
 .pii-denylist.local
+.pii-allow.local
 **/*.local.txt
 
 # kb-update: local version pin written after each update (lives in _meta/ in user projects)

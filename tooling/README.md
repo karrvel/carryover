@@ -199,14 +199,20 @@ Env: `KB_VAULT` (default `$repo-root/_knowledge`). Install it alongside the Pyth
 
 ## pii-scan.py — mechanical private-context guard (for a repo that goes public)
 A fixed list of codified regexes — session URLs, `/Users/…` home paths, emails, private keys, AWS /
-GitHub / OpenAI-style tokens — over tracked file **contents**, **commit messages** in a range, or the
-**staged** diff. Exits 1 on any match, so it can gate a push. Project-specific literals belong in a
-gitignored local denylist (`.pii-denylist.local` at the repo root, or `--denylist` / `$PII_DENYLIST`)
-— never committed.
+GitHub / OpenAI-style tokens, secret assignments — over tracked file **contents**, the **staged**
+diff, or a commit **range** (messages, lines added anywhere in it, and the **author/committer
+identities** `git log` publishes). Exits 1 on any match, so it can gate a push. Project-specific
+literals belong in a gitignored local denylist (`.pii-denylist.local` at the repo root, or
+`--denylist` / `$PII_DENYLIST`); project-specific false positives in a gitignored
+`.pii-allow.local` (one safe substring per line) — both survive kit updates, unlike edits to
+`ALLOW` in the script. It prints how many tracked files it scanned and treats **0** as a failure
+(a repo with nothing committed has nothing to vouch for). `generic-secret-assign` matches
+`UPPER_SNAKE_SECRET=` env lines, and needs a quoted literal or a digit-bearing ≥12-char value, so
+type annotations and `x = os.environ.get(...)` don't trip it.
 ```bash
 python3 tooling/pii-scan.py                             # all tracked files
 python3 tooling/pii-scan.py --staged                    # staged additions (pre-commit)
-python3 tooling/pii-scan.py --range origin/main..HEAD   # + the commit messages you're about to push
+python3 tooling/pii-scan.py --range origin/main..HEAD   # + messages, added lines, identities you're about to push
 ```
 Exit 0 = clean, 1 = matches, 2 = aborted because a `git` command failed (e.g. an invalid `--range`)
 — it fails closed, so a 2 is never "clean". `hooks/pre-push` runs it automatically over the tree
@@ -215,9 +221,9 @@ Exit 0 = clean, 1 = matches, 2 = aborted because a `git` command failed (e.g. an
 git config core.hooksPath tooling/hooks      # per clone; bypass once with git push --no-verify
 ```
 To use it in a project that already points `core.hooksPath` at `.githooks/`, copy `hooks/pre-push`
-there (`chmod +x`) alongside the KB `pre-commit` — and note it resolves the scanner at
-`<repo-root>/tooling/pii-scan.py` and **exits 0 silently if that file is missing**, so put the script
-there (or edit the `SCAN=` line to wherever you keep it) or the guard won't actually run.
+there (`chmod +x`) alongside the KB `pre-commit`. It looks for the scanner at
+`<repo-root>/tooling/pii-scan.py`, then `${KB_META:-<repo-root>/_meta}/pii-scan.py`, and **blocks the
+push** if neither exists — a guard that can't run must not look like one that passed.
 
 ## kb-update.py — pull new kit versions
 
