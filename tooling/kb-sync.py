@@ -136,6 +136,12 @@ def _disp(path):
         return "~" + path[len(home):] if path.startswith(home) else path
     return rel
 
+# INDEX.md, AGENTS.md, GEMINI.md and the Cursor rules are TRACKED files, so they get root-relative
+# or ~-collapsed paths — an absolute /Users/<name>/… there is a privacy leak in any public repo (the
+# kit's own pii-scan flags it) and churns every time the project moves. MEMORY.md is untracked and
+# loads from any cwd, so it keeps absolute paths.
+SELF = _disp(os.path.abspath(__file__))
+
 def write(path, body):
     body = body.rstrip() + "\n"
     if CHECK:
@@ -211,7 +217,7 @@ def moc(title, subdir, intro, group_by_area=False, split_status=False,
             body += [f"## {a} ({len(by[a])})\n"] + [line(i) for i in by[a]] + [""]
     else:
         body += [line(i) for i in items]
-    body.append(f"\n*{len(items)} shards. Generated — edit shards, then `python3 kb-sync.py`.*")
+    body.append(f"\n*{len(items)} shards. Generated — edit shards, then `python3 {SELF}`.*")
     write(os.path.join(VAULT, subdir + ".md"), "\n".join(body))
     return items
 
@@ -238,9 +244,9 @@ def index(counts, has_arch):
             "## Reference (raw-source backbone — Karpathy layer 1)"]
     body += [f"- `reference/{r}`" for r in refs] or ["- _(none yet)_"]
     body += ["\n## The two tiers (MemGPT-style)",
-             f"- **Core (always-loaded):** `{MEMORY_DIR}/MEMORY.md` — tiny, pointers + LIVE state.",
+             f"- **Core (always-loaded):** `{_disp(os.path.join(MEMORY_DIR, 'MEMORY.md'))}` — tiny, pointers + LIVE state.",
              "- **Archival (on-demand):** this vault — browse this INDEX, open the few pages you need.\n",
-             f"*{sum(counts.values()) + (1 if has_arch else 0)} shards total. Generated — edit shards, then `python3 kb-sync.py`.*"]
+             f"*{sum(counts.values()) + (1 if has_arch else 0)} shards total. Generated — edit shards, then `python3 {SELF}`.*"]
     write(os.path.join(VAULT, "INDEX.md"), "\n".join(x for x in body if x != ""))
 
 def memory(sec, tsk):
@@ -269,10 +275,10 @@ def _agent_body(sec, tsk, heading="agent quick-start"):
     def t(i): return (i.get("live_summary") or i.get("title", i["name"])).strip().strip('"')
     body = [f"# {PROJECT} — {heading}\n", GEN,
             "\n## Cold start",
-            f"1. `cat {VAULT}/INDEX.md` — browse the map, open only what you need.",
+            f"1. `cat {_disp(os.path.join(VAULT, 'INDEX.md'))}` — browse the map, open only what you need.",
             "2. Check LIVE sections below for open security findings and active work.\n",
             "## Vault location",
-            f"`{VAULT}` — plain markdown, frontmatter-tagged shards.\n",
+            f"`{_disp(VAULT)}` — plain markdown, frontmatter-tagged shards.\n",
             f"## 🔴 LIVE — open security findings ({len(live_sec)}) — verify before acting"] + \
            ([f"- [[{i['name']}]] — {t(i)}" for i in live_sec] or ["- _none open_"])
     body += [f"\n## 🟠 LIVE — open work ({len(live_tsk)})"] + \
