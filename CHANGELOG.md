@@ -5,12 +5,42 @@ All notable changes to carryover. Versions track `VERSION` in `tooling/kb-sync.p
 Update an existing install with `python3 _meta/kb-update.py` (see
 [Updating the kit](README.md#updating-the-kit)).
 
-## Unreleased
+## 0.6 — unreleased
 
-Not in a release tag yet. `kb-update.py` now defaults to the newest release tag, so an existing
-install pulls this work with `python3 _meta/kb-update.py --main` until it ships in a tag.
+Not in a release tag yet. Until it is, an existing install pulls this work with
+`python3 _meta/kb-update.py --main`. Most of it comes from a health audit of 26 real vaults built
+with this kit: their *content* held up well against the code, but the operational layer around it
+did not — vaults never committed, gates never wired, a LIVE tier that misreported open work, and a
+PII guard that missed the most common leak. Every content gate passed on all of them.
+
+**Upgrade notes.**
+- After updating, the next `kb-sync` run **changes tracked generated files**: `AGENTS.md`,
+  `GEMINI.md`, `.cursor/rules/kb-context.mdc` and `INDEX.md` no longer embed absolute home paths,
+  and every MOC/INDEX footer names `python3 _meta/kb-sync.py`. `MEMORY.md` is unaffected. Commit
+  that diff.
+- `kb.env` is now read by every script. If yours drops platforms (`KB_PLATFORMS=claude,codex`),
+  manual runs stop regenerating the dropped files, and `kb-sync` reports any file left behind as an
+  orphan — delete it or re-enable the platform.
+- `kb-lint` has new **warnings**. They never fail a commit unless you run `KB_STRICT=1`.
+- `hooks/pre-push` now **blocks** when it can't find `pii-scan.py` (it used to exit 0 silently).
 
 ### Added
+- **`tooling/kb-doctor.py`** — checks that a vault is actually *protected*, which no content gate
+  does: git repo, HEAD exists, vault tracked, age of uncommitted vault work, remote; gate wired
+  (`core.hooksPath` **and** a hook behind it); `_meta/` ignored; `kb.env` not swallowed by a
+  `*.env` rule; CLAUDE.md markers; MEMORY.md where Claude Code loads it; and a **rollback**
+  heuristic (large net vault deletion vs HEAD, or shards whose `updated:` went backwards — the
+  signature of an editor or agent restoring an old snapshot, which a `kb-sync` run would then bake
+  into MEMORY.md). `--brief` prints problems only; `kb-session-start.sh` runs it at session start.
+  HOWTO gains an explicit *make the first commit, then run the doctor* step.
+- **`pii-scan.py` scans commit identities.** A `--range` scan now covers author/committer names and
+  emails — what `git log` publishes with every commit, and the usual way a personal address reaches
+  a public repo. `@users.noreply.github.com` is allowed.
+- **`.pii-allow.local`** — project-specific false positives, gitignored, surviving kit updates.
+- **`KB_LINKS_IGNORE`** (kb-links) — a regex for link targets that aren't local files, e.g.
+  tracker-relative links pasted from an issue tracker, which used to fail the hard gate for good.
+- **`KB_LIVE_MAX`** (kb-sync, default 30) — a normal run warns when the LIVE tier outgrows its
+  budget, or a LIVE line passes 300 chars.
 - **Orphaned-platform-file detection in `kb-sync.py`** — the mirror image of 0.5's collision guard.
   Dropping a platform from `KB_PLATFORMS` stopped kb-sync *writing* its `AGENTS.md` / `GEMINI.md` /
   `.cursor/rules/kb-context.mdc`, but left the file on disk — and, in both supported layouts,
@@ -24,6 +54,37 @@ install pulls this work with `python3 _meta/kb-update.py --main` until it ships 
   `MEMORY.md` and `CLAUDE.md` are out of scope. Exit code on a normal run stays 0.
 
 ### Changed
+- **Every script reads `.githooks/kb.env`** — parsed, never executed; `KB_*` keys only; the
+  environment still wins; `KB_ROOT` is ignored there. Before, only the hook sourced it, so manual
+  runs ignored `KB_PLATFORMS` and friends.
+- **`kb-sync --check` reports three classes** — *stale* (content differs), *missing* (never
+  generated) and *older version marker only*. The last is informational and no longer fails: after
+  a kit upgrade every generated file used to read "stale" purely because the marker's version
+  changed, which buried the real drift.
+- **`kb-update`** reads the installed version from `kb-sync.py`'s `VERSION` (the `kb.version` pin is
+  only a fallback — pins went stale whenever scripts were copied by hand); **refuses to downgrade**
+  to an older release unless you name it with `--ref`; and now also offers the `*.sh` helpers and
+  the project's `.githooks/pre-commit` (hard or advisory, whichever is installed), each as a diff.
+- **`kb-staleness`** falls back to the project root for anchors when there is no `repos/` (every
+  embedded vault was silently skipped), ages `decays-*` shards in `reference/` too, and treats
+  `./x.sh` as `x.sh` and a bare `.d.ts` as no anchor at all.
+- **`kb-lint` warns** on: shards outside the collections (an `ops/` folder nothing indexes);
+  `active` + `one-shot`; an active shard whose `live_summary` says it's resolved; `log.md`
+  headings the documented grep can't find; a vault README with unfilled template text or copied
+  from the kit's own dogfood vault.
+- **`pii-scan`**: `generic-secret-assign` now catches `UPPER_SNAKE_SECRET=` env lines (`\b` never
+  fired after `_`) and no longer fires on type annotations or `x = os.environ.get(...)`; a scan of
+  **0 tracked files** fails instead of reporting clean; `--full-name` fixes scans from a
+  subdirectory, which read the wrong files; the banner no longer asserts the repo is public.
+- **`hooks/pre-push`** finds the scanner in `${KB_META:-_meta}/` as well as `tooling/`, and blocks
+  the push when neither exists.
+- Generated `AGENTS.md`, `GEMINI.md`, the Cursor rules and `INDEX.md` use root-relative or
+  `~`-collapsed paths instead of absolute home paths (they are tracked files; the kit's own
+  pii-scan flagged its own output), and generated footers name the real `_meta/kb-sync.py` path.
+- `kb-sync.py` `VERSION` is `0.6`.
+- `template/` points at the public research note instead of a `../research/` path that only
+  resolves inside the kit; `setup/embedded.gitignore` keeps `.githooks/kb.env` tracked under a
+  `*.env` rule and ignores `.pii-allow.local`.
 - **`kb-update.py` updates to the newest *release tag*, not the tip of the default branch.** Once
   v0.5 was tagged, the old clone-the-tip behaviour handed users unreleased mid-development scripts
   while both sides still printed "0.5". It now discovers tags with `git ls-remote --tags --refs`,
@@ -35,16 +96,18 @@ install pulls this work with `python3 _meta/kb-update.py --main` until it ships 
   `git ls-remote` prints the error and exits 2 rather than silently updating you from an unintended
   ref. The run header names the ref in use. Exit codes, `--check`'s read-only guarantee, and the
   "pin written only when every offered script was applied" rule are unchanged.
-
-## Unreleased
-
-### Changed
 - **Renamed: `kb-template` → `carryover`.** `kb-template` implied GitHub's *template repository*
   feature ("Use this template"), which this repo is not — you copy directories out of it. The new
   name is what the kit actually does: carry knowledge over between agent sessions.
   GitHub redirects both former names, and `git clone` **and** `git ls-remote` were verified through
   the redirect, so `kb-update.py` in an existing `_meta/` keeps working without any action. Update
   it at your leisure and `REPO_URL` moves to the new address.
+
+### Fixed
+- **`kb-sync.py --help` regenerated everything.** kb-sync ignored unknown arguments, so `--help` (or
+  any typo) ran a full write; run outside a project it scaffolded MOCs, platform files and a Claude
+  memory dir out of nothing. Unknown flags now exit 2, `--help` prints usage, and a missing vault
+  exits 2 — nothing written in any of those cases.
 
 ## 0.5 — 2026-08-27
 
@@ -90,6 +153,8 @@ First tagged release, and the first since the kit went public under MIT.
   (`durable`) stay out of the LIVE block, which is what keeps the core tier small. The `security/`
   MOC still groups by volatility — its heading says `(decays-with-code)` rather than claiming
   "open". Tagging guidance added to `template/README.md`.
+  *Correction (0.6): this fix landed after the `v0.5` tag was cut, so the tagged 0.5 release does
+  not contain it — install 0.6, or `kb-update.py --main` until it is tagged.*
 - **kb-sync's two `CLAUDE.md` warnings pointed at "HOWTO §6", a file no install path puts in a
   user's project.** They now link to the published Quick start.
 - **The collision guard clobbered a hand-written file that merely mentioned the marker.**
