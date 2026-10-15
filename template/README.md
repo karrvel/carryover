@@ -14,7 +14,7 @@ Plain-markdown, git-trackable, Obsidian-compatible knowledge, distilled from the
 past AI-agent sessions. Design = **Karpathy's "LLM wiki"** (compile once, don't re-derive) +
 **MemGPT/Letta two-tier memory** (tiny always-loaded core + on-demand vault). Deliberately **shallow
 and plain-markdown — no vector/spatial RAG** (unnecessary below ~150–200 pages; see
-`../research/plain-markdown-vs-vector-rag.md`).
+[the kit's research note](https://github.com/karrvel/carryover/blob/main/research/plain-markdown-vs-vector-rag.md)).
 
 ## Two-tier memory (how a future agent should use this)
 1. **Core (always-loaded):** Claude Code project memory `MEMORY.md` — the index that auto-loads.
@@ -51,7 +51,8 @@ of the kb-sync run or from `.githooks/kb.env` (every run reads it; the environme
 `export KB_PLATFORMS="claude,codex"` in `kb.env`, or `KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py`
 for one run. `claude` covers both `MEMORY.md` **and**
 the `CLAUDE.md` LIVE blocks.
-Commit `AGENTS.md`, `GEMINI.md`, and `.cursor/rules/kb-context.mdc` to the repo.
+Commit whichever of `AGENTS.md`, `GEMINI.md` and `.cursor/rules/kb-context.mdc` your `KB_PLATFORMS`
+generates.
 
 **Orphan guard.** Removing `codex`, `gemini` or `cursor` from `KB_PLATFORMS` stops kb-sync *writing*
 that project-root file; it does not remove a file already written. The leftover stays on disk — and,
