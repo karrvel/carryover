@@ -136,6 +136,23 @@ staged. Run the four commands above manually after each fresh clone — there is
 > gate is not running** and commits go through unchecked. And if `git config core.hooksPath` already
 > prints some other path, a symlink under `.git/hooks/` never runs: put the gate in that directory instead.
 
+### Make the first commit — then check the setup
+The gate runs on `git commit`, and nothing else in the kit looks at git state: lint, links and
+`kb-sync --check` all pass on a vault that has **never been committed**, which is the commonest way
+a vault is lost. Commit it now (check `.gitignore` covers `_meta/` and any secrets or raw evidence
+first), then run the doctor:
+```bash
+git -C /path/to/project add -A && git -C /path/to/project commit -m "kb: initial vault"
+python3 /path/to/project/_meta/kb-doctor.py     # read-only; '0 problem(s). healthy ✓' is the goal
+```
+`kb-doctor` checks what the content gates can't: is it a git repo, does HEAD exist, how much vault
+work is uncommitted and how old, is there a remote, is the gate wired (hooksPath set *and* a hook
+there), is `_meta/` ignored, is `kb.env` swallowed by a `*.env` rule, are the CLAUDE.md markers and
+MEMORY.md where they belong — and whether the working tree looks **rolled back** (far more vault text
+deleted than added vs HEAD, or shards whose `updated:` went backwards — an editor or agent restoring
+an old snapshot; recover that *before* running kb-sync, which would bake it into MEMORY.md).
+`kb-session-start.sh` runs it in `--brief` mode, so problems surface at the start of every session.
+
 ### Multi-platform support {#multi-platform}
 
 kb-sync.py generates context files for multiple agent platforms from the same vault. Control which
@@ -210,6 +227,8 @@ python3 _meta/kb-fix.py        # quote frontmatter values that break Obsidian's 
 python3 _meta/kb-lint.py       # gate: schema valid + no dialect drift + no Obsidian-breakers
 python3 _meta/kb-links.py      # gate: broken [[wikilinks]] / dead file refs
 python3 _meta/kb-staleness.py  # the re-verify queue: volatile shards overdue for a code re-check
+python3 _meta/kb-doctor.py     # is the vault committed, gated and wired? (read-only)
+git add _knowledge && git commit -m "kb: <what changed>"   # an uncommitted vault is an unprotected one
 ```
 Append to `log.md` per session. Cap the always-loaded core (~30 items). Keep the taxonomy flat.
 **The rule everyone skips is `decays-with-code` re-verification — so `kb-staleness.py` exists to make

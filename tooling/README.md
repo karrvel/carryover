@@ -185,7 +185,8 @@ Env: `KB_ROOT`, `KB_VAULT`, `KB_REPOS`, `KB_STALE_DAYS`, `KB_TODAY`. A project w
 convention can layer a `gh pr view` drift check on top in its own `_meta/`.
 
 ## kb-session-start.sh — the cold-start orientation print
-POSIX `sh`, no Python: prints every **active** gotcha (`[[name]] — title`, skipping `resolved` /
+POSIX `sh`: first runs `kb-doctor.py --brief` when it's next to it (prints nothing for a healthy
+vault; needs `python3`), then prints every **active** gotcha (`[[name]] — title`, skipping `resolved` /
 `superseded`) plus the open tasks, so a fresh session sees the traps before it touches code. Cheap
 enough to run every session.
 ```bash
@@ -196,6 +197,21 @@ Env: `KB_VAULT` (default `$repo-root/_knowledge`). Install it alongside the Pyth
 `cp` above copies `tooling/*.sh` too — then wire it wherever your agent reads a first action (a
 `SessionStart` hook, or a "First action every session" line in `CLAUDE.md` / `AGENTS.md`).
 `kb-update.py` refreshes it along with the `*.py` scripts (since 0.6).
+
+## kb-doctor.py — is the vault actually protected?
+The content gates (kb-lint, kb-links, kb-sync --check) all pass on a vault that was never committed,
+has no gate wired, or was just rolled back by an editor — and the gate itself only runs on commit.
+kb-doctor checks that operational layer, read-only: git repo / HEAD / vault tracked / uncommitted
+vault work and its age / remote; `core.hooksPath` **and** a hook file behind it; `_meta/` ignored;
+`.githooks/kb.env` not swallowed by a `*.env` ignore; CLAUDE.md markers; MEMORY.md at the derived
+memory dir; and a rollback heuristic (net vault deletion ≥200 lines and >3× the additions vs HEAD, or
+any shard whose `updated:` is older than at HEAD).
+```bash
+python3 _meta/kb-doctor.py           # full report
+python3 _meta/kb-doctor.py --brief   # problems only, silent when healthy (kb-session-start.sh uses this)
+python3 _meta/kb-doctor.py --fail    # exit 1 on any problem — for CI or a wrapper script
+```
+Env: `KB_ROOT`, `KB_VAULT`, `KB_MEMORY_DIR`, `KB_PLATFORMS` (as kb-sync; also read from `kb.env`).
 
 ## pii-scan.py — mechanical private-context guard (for a repo that goes public)
 A fixed list of codified regexes — session URLs, `/Users/…` home paths, emails, private keys, AWS /

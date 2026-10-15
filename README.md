@@ -72,7 +72,7 @@ Stdlib-only Python 3 — no dependencies, nothing to install.
 | | |
 |---|---|
 | **`template/`** | the vault scaffold you copy in as `_knowledge/` |
-| **`tooling/`** | `kb-sync` (shards → navigation + memory) · `kb-lint` (schema gate) · `kb-fix` (Obsidian-safe frontmatter) · `kb-links` (link-rot gate) · `kb-staleness` (re-verify queue) · `kb-update` (pull new versions) · `prefilter` (transcripts → digests) · `hooks/` · `kb-eval/` |
+| **`tooling/`** | `kb-sync` (shards → navigation + memory) · `kb-lint` (schema gate) · `kb-fix` (Obsidian-safe frontmatter) · `kb-links` (link-rot gate) · `kb-staleness` (re-verify queue) · `kb-doctor` (committed? gated? rolled back?) · `kb-update` (pull new versions) · `prefilter` (transcripts → digests) · `hooks/` · `kb-eval/` |
 | **`setup/`** | ready `.gitignore` for each layout below |
 | **`research/`** | the fact-checked *why* |
 | **Docs** | [HOWTO](HOWTO.md) · [AGENTS](AGENTS.md) · [CHANGELOG](CHANGELOG.md) · [SECURITY](SECURITY.md) · [LICENSE](LICENSE.md) |
