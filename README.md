@@ -343,9 +343,10 @@ python3 _meta/kb-update.py --ref v0.5   # pin to an explicit tag, branch or sha
 
 By default it updates to the **newest release tag** — versions are ordered numerically, so `v0.10`
 outranks `v0.9`, and non-version tags are ignored. A repo with no release tags falls back to the
-default branch with a one-line note. The run header prints the ref it used. Only the top-level
-`tooling/*.py` in `_meta/` are updated — not the `*.sh` helpers, not `hooks/`, not `kb-eval/`.
-Your `_knowledge/` vault is never touched.
+default branch with a one-line note. The run header prints the ref it used. It updates the
+`tooling/*.py` and `*.sh` scripts in `_meta/` and, if the project has one, `.githooks/pre-commit`
+(each shown as a diff first) — not `kb-eval/`. A target older than what's installed is refused
+unless you pin it with `--ref`. Your `_knowledge/` vault is never touched.
 
 > [!WARNING]
 > Silent mode skips the diff review. Run interactive at least once on a new version before using

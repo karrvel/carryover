@@ -195,7 +195,7 @@ KB_VAULT=/path/to/_knowledge sh _meta/kb-session-start.sh
 Env: `KB_VAULT` (default `$repo-root/_knowledge`). Install it alongside the Python scripts — the
 `cp` above copies `tooling/*.sh` too — then wire it wherever your agent reads a first action (a
 `SessionStart` hook, or a "First action every session" line in `CLAUDE.md` / `AGENTS.md`).
-Note `kb-update.py` only refreshes `*.py`, so re-copy this one by hand when you pull a new kit.
+`kb-update.py` refreshes it along with the `*.py` scripts (since 0.6).
 
 ## pii-scan.py — mechanical private-context guard (for a repo that goes public)
 A fixed list of codified regexes — session URLs, `/Users/…` home paths, emails, private keys, AWS /
@@ -222,9 +222,12 @@ there (or edit the `SCAN=` line to wherever you keep it) or the guard won't actu
 ## kb-update.py — pull new kit versions
 
 Updates the top-level `tooling/*.py` scripts copied into `_meta/` to the **newest release tag** of the
-public repo (or whatever ref you ask for — see below) — **not** `hooks/`, **not** `kb-eval/`, **not**
-`*.sh` (re-copy those by hand). Never touches `_knowledge/`. The `kb.version` pin file is written
-**only** when every offered script was applied, and **never** by `--check`.
+public repo (or whatever ref you ask for — see below), plus the `*.sh` helpers and — when the
+project has one — `.githooks/pre-commit` (matched to the hard or advisory variant you installed;
+never installed if absent). **Not** `kb-eval/`, and never `_knowledge/`. The installed version is
+read from `kb-sync.py`'s own `VERSION`; the `kb.version` pin is only a fallback, written **only**
+when every offered file was applied, and **never** by `--check`. A target **older** than the
+installed version is refused (exit 2, nothing written) unless you named it with `--ref`.
 
 ```bash
 python3 kb-update.py            # interactive — colored diff per file, [y]es/[n]o/[a]ll/[q]uit

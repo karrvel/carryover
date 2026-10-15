@@ -239,6 +239,10 @@ that aren't plain versions (`-rc1`, `-beta`, anything else) are ignored. If the 
 usable tags at all it prints a one-line note and falls back to the default branch rather than
 failing. Either way the run header names the ref in use (`target: v0.5 (newest release)`).
 
+Besides the `*.py` scripts it offers the `*.sh` helpers and your `.githooks/pre-commit` (hard or
+advisory, whichever you installed), each as a diff. It refuses to move you to an **older** version
+than the installed `kb-sync.py` reports, unless you name that ref with `--ref`.
+
 It updates only the top-level `tooling/*.py` scripts copied into `_meta/` — not `hooks/`, not
 `kb-eval/`, not the `*.sh` helpers. Your `_knowledge/` vault is never touched. The `kb.version` pin
 in `_meta/` is written **only when every offered script was applied** — a partial or declined run
