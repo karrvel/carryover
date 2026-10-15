@@ -11,7 +11,7 @@ Not in a release tag yet. Until it is, an existing install pulls this work with
 `python3 _meta/kb-update.py --main`. Most of it comes from a health audit of 26 real vaults built
 with this kit: their *content* held up well against the code, but the operational layer around it
 did not — vaults never committed, gates never wired, a LIVE tier that misreported open work, and a
-PII guard that missed the most common leak. Every content gate passed on all of them.
+PII guard that missed the most common leak. `kb-lint` passed on all 26 of them.
 
 **Upgrade notes.**
 - After updating, the next `kb-sync` run **changes tracked generated files**: `AGENTS.md`,

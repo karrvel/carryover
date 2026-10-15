@@ -156,6 +156,11 @@ git config core.hooksPath .githooks     # ⚠ see below if this repo already has
 #    _knowledge/README.md ({PROJECT}/TODO), then generate navigation:
 python3 _meta/kb-sync.py && python3 _meta/kb-fix.py \
   && python3 _meta/kb-lint.py && python3 _meta/kb-links.py
+
+# 3. Commit it — the gate only runs on commit, and an uncommitted vault is an unprotected one —
+#    then confirm the setup (read-only; aim for '0 problem(s). healthy ✓'):
+git add -A && git commit -m "kb: initial vault"
+python3 _meta/kb-doctor.py
 ```
 
 <details>

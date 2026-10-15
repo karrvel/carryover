@@ -293,7 +293,8 @@ def main() -> int:
         if cur_key and rem_key and rem_key < cur_key and not ref:
             print(_colour(f"Error: {target_label} is version {remote_ver}, older than the installed "
                           f"{current_ver} — refusing to downgrade.", "31"))
-            print("  Nothing was changed. To go back on purpose, name the ref: --ref <tag-or-branch>.")
+            print("  Nothing was changed. Installed from the development branch? Use --main.")
+            print("  To go back on purpose, name the ref: --ref <tag-or-branch>.")
             return 2
         if cur_key and cur_key == rem_key and not (ref or use_main):
             print(_colour(f"Note: installed and target are both {current_ver}, but the scripts may "

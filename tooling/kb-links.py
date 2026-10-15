@@ -34,8 +34,9 @@ def _load_kb_env(root):
         if not m or m.group(1) == "KB_ROOT":
             continue
         v = m.group(2).strip()
-        if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
-            v = v[1:-1]
+        if v[:1] in ("\"", "'"):                         # quoted: up to the matching quote, so a
+            end = v.find(v[0], 1)                         # trailing `# comment` (or a # inside the
+            v = v[1:end] if end > 0 else v[1:]            # quotes) is handled either way
         else:
             v = re.split(r"\s+#", v, maxsplit=1)[0].strip()   # unquoted: drop a trailing # comment
         os.environ.setdefault(m.group(1), v)
