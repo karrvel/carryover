@@ -12,6 +12,8 @@ Three checks, all read-only, stdlib-only:
 Exit 1 if any broken internal link (A or B) is found → wire into pre-commit / CI alongside kb-lint.
 
 CONFIG:  KB_ROOT (default two dirs up) · KB_VAULT (default $KB_ROOT/_knowledge)
+         KB_LINKS_IGNORE  regex; markdown-link targets matching it are not checked as local files
+                          (e.g. tracker-relative links pasted from an issue tracker: `^/[A-Z]+/issues/`)
 Usage:   python3 kb-links.py            # internal links only (fast, offline)
          python3 kb-links.py --urls     # also check external URLs (slow, network)
          python3 kb-links.py --urls --timeout 5
@@ -48,6 +50,10 @@ FENCE = re.compile(r"```.*?```|~~~.*?~~~", re.S)        # fenced code blocks
 INLINE = re.compile(r"`[^`\n]*`")                      # inline code spans
 COMMENT = re.compile(r"<!--.*?-->", re.S)              # HTML comments (scaffold guidance, examples)
 SKIP = {"_SHARD_TEMPLATE.md"}                           # scaffold w/ intentional placeholder links
+# Without an escape hatch, one pasted tracker link (`(/PROJ/issues/PROJ-87)`) fails the hard gate
+# forever, and the only way out was the advisory hook — which then checks nothing.
+_ignore = os.environ.get("KB_LINKS_IGNORE")
+IGNORE = re.compile(_ignore) if _ignore else None
 
 
 def strip_code(txt):
@@ -94,7 +100,7 @@ def check_internal():
                 broken_wiki.append((rel, tgt))
         for m in MDLINK.finditer(txt):
             tgt = m.group(1).strip()
-            if tgt.startswith(("http://", "https://", "#", "mailto:")):
+            if tgt.startswith(("http://", "https://", "#", "mailto:")) or (IGNORE and IGNORE.search(tgt)):
                 continue
             path = tgt.split("#")[0]
             if not path:

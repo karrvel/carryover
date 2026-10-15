@@ -63,6 +63,16 @@ OPTIONAL = ["verify", "live_summary"]   # verify: date of last human re-verifica
 # Leftovers from _SHARD_TEMPLATE.md / template/README.md that mean "nobody filled this in".
 PLACEHOLDERS = ["{PROJECT}", "example-slug-kebab-case", "Copy this file, rename",
                 "One-line, specific, human-readable title", "2–5 tight sentences"]
+# Generated/structural files at the vault root — never shards.
+ROOT_FILES = {"INDEX.md", "README.md", "log.md", "architecture.md", "_SHARD_TEMPLATE.md"} | \
+             {c + ".md" for c in COLLECTIONS}
+LOG_HEADING = re.compile(r"^## \[\d{4}-\d{2}-\d{2}\] [^|]+\|")
+# A vault README never filled in from template/ …
+README_SMELLS = ["{PROJECT}", "Copy this `template/` tree"]
+# … or copied from the kit's own dogfood vault, whose H1 names the kit instead of this project.
+README_H1 = re.compile(r"^# _knowledge — the (\S+) local knowledge base", re.M)
+KIT_NAMES = {"kb-template", "agent-kb", "carryover"}
+CLOSED_WORDS = re.compile(r"^\W*(resolved|superseded|fixed|done|closed)\b", re.I)
 KEBAB = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -197,9 +207,54 @@ def main():
             if p in hay:
                 err(f"unfilled template placeholder present: {p!r}")
 
+        # status/volatility/summary that contradict each other — each one misroutes the LIVE tier
+        if fm.get("status") == "active" and fm.get("volatility") == "one-shot":
+            warn("status `active` with volatility `one-shot` (one-shot = a closed record) — "
+                 "kb-staleness never re-checks it; use decays-with-code while it's open")
+        if fm.get("status") == "active" and CLOSED_WORDS.match(fm.get("live_summary", "")):
+            warn("live_summary says it's closed but status is `active` — it is still listed as open "
+                 "in every LIVE block")
+
         if MAX_LINES and body.count("\n") > MAX_LINES:
             warn(f"body is {body.count(chr(10))} lines (> {MAX_LINES}) — likely non-atomic; "
                  f"consider splitting")
+
+    # shards the tooling can't see: frontmatter'd .md outside the collections and reference/
+    known = set(COLLECTIONS) | {"reference"}
+    for dp, dns, fns in os.walk(VAULT):
+        dns[:] = [d for d in dns if not d.startswith(".")]
+        reldir = os.path.relpath(dp, VAULT)
+        top = reldir.split(os.sep)[0]
+        for fn in fns:
+            if not fn.endswith(".md") or (reldir == "." and fn in ROOT_FILES) or top in known:
+                continue
+            fm, _ = parse(os.path.join(dp, fn))
+            if fm.get("name"):
+                warns.append(f"{os.path.relpath(os.path.join(dp, fn), ROOT)}: shard outside the kit's "
+                             f"collections — INDEX, MOCs, kb-lint and kb-staleness never see it "
+                             f"(move it into {'/'.join(COLLECTIONS)}/ or reference/)")
+
+    # log.md: the `## [YYYY-MM-DD] kind | summary` heading is what the documented finder greps for
+    log = os.path.join(VAULT, "log.md")
+    if os.path.exists(log):
+        heads = [ln.rstrip() for ln in open(log, errors="ignore") if ln.startswith("## ")]
+        bad = [h for h in heads if not LOG_HEADING.match(h)]
+        if bad:
+            warns.append(f"{os.path.relpath(log, ROOT)}: {len(bad)} of {len(heads)} entry heading(s) "
+                         f"don't match `## [YYYY-MM-DD] kind | summary` (e.g. {bad[0][:60]!r}) — "
+                         f"`grep '^## \\['` and other tooling won't find them")
+
+    readme = os.path.join(VAULT, "README.md")
+    if os.path.exists(readme):
+        txt = open(readme, errors="ignore").read()
+        found = [m for m in README_SMELLS if m in txt]
+        h1 = README_H1.search(txt)
+        project = os.environ.get("KB_PROJECT") or os.path.basename(ROOT.rstrip("/"))
+        if h1 and h1.group(1) in KIT_NAMES and project not in KIT_NAMES:
+            found.append(f"H1 names the kit ({h1.group(1)}), not this project — copied from the kit's dogfood vault?")
+        if found:
+            warns.append(f"{os.path.relpath(readme, ROOT)}: schema README still has template/kit text "
+                         f"({', '.join(repr(f) for f in found)}) — fill it in from the kit's template/README.md")
 
     for name, locs in names_seen.items():
         if len(locs) > 1:

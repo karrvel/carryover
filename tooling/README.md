@@ -100,7 +100,9 @@ Idempotent.
 python3 kb-sync.py
 KB_ROOT=/path/to/project KB_PROJECT=myproj KB_TODAY=2026-07-05 python3 kb-sync.py
 ```
-Env: `KB_ROOT`, `KB_VAULT`, `KB_MEMORY_DIR`, `KB_PROJECT`, `KB_TODAY`, `KB_AREAS`, `KB_PLATFORMS`.
+Env: `KB_ROOT`, `KB_VAULT`, `KB_MEMORY_DIR`, `KB_PROJECT`, `KB_TODAY`, `KB_AREAS`, `KB_PLATFORMS`,
+`KB_LIVE_MAX` (default 30 — a normal run warns when the LIVE tier lists more items than this, or
+when a LIVE line runs past 300 chars; it never fails).
 `KB_PLATFORMS` (comma-separated; default `claude,codex,gemini,cursor`; whitespace around items is
 tolerated) picks which context files get generated — `claude` → `MEMORY.md` **and** the `CLAUDE.md`
 LIVE blocks · `codex` → `AGENTS.md` (also read by Antigravity) · `gemini` → `GEMINI.md` ·
@@ -139,6 +141,14 @@ Validates every shard's frontmatter: required fields present; `type`/`status`/`v
 canonical (catches `decays-with-prs` vs `decays-with-code`, off-schema `done`/`complete`); dates
 well-formed; names unique + kebab-case; no unfilled template placeholders; **and no unquoted values
 that break Obsidian's YAML** (see `kb-fix`). Exit 1 on any ERROR — wire into pre-commit / CI.
+
+It also **warns** (never fails, unless `KB_STRICT=1`) about things that misroute the tooling: a
+shard with frontmatter outside the collections and `reference/` (e.g. an `ops/` folder — INDEX, MOCs,
+lint and staleness never see it); `status: active` with `volatility: one-shot`; an active shard
+whose `live_summary` opens with resolved/superseded/fixed/done/closed; `log.md` headings that don't
+match `## [YYYY-MM-DD] kind | summary`; and a vault `README.md` that still holds template text or was
+copied from the kit's own dogfood vault. A vault running `KB_STRICT=1` will start failing on these
+after an upgrade — that is the point, but fix or relax before you update.
 ```bash
 python3 kb-lint.py                                            # report + gate
 KB_STRICT=1 python3 kb-lint.py                                # warnings fail too
@@ -168,20 +178,27 @@ broken internal links → pre-commit / CI.
 ```bash
 python3 kb-links.py            # internal links only (fast, offline)
 python3 kb-links.py --urls     # also HEAD-check external URLs (slow, network; advisory-only)
+KB_LINKS_IGNORE='^/[A-Z]+/issues/' python3 kb-links.py   # skip targets matching a regex
 ```
-Env: `KB_ROOT`, `KB_VAULT`.
+Env: `KB_ROOT`, `KB_VAULT`, `KB_LINKS_IGNORE` (a regex; markdown-link targets it matches aren't
+checked as local files — for tracker-relative links pasted from an issue tracker, which would
+otherwise fail the hard gate forever).
 
 ## kb-staleness.py — the re-verify queue
 Surfaces the one discipline every vault skips: volatile (`decays-*`) shards whose `updated:` is older
 than the threshold (they must be re-checked against code before an agent trusts them), plus
-backtick-quoted source paths that no longer exist under `repos/` (code that moved out from under a
-shard). Read-only.
+backtick-quoted source paths that no longer exist under the code root (code that moved out from
+under a shard). Read-only. It reads the five collections, `reference/` and `architecture.md`. The
+code root is `KB_REPOS`, else `repos/` when it exists (workspace layout), else the project root
+(embedded layout — before 0.6 the anchor check silently skipped every embedded vault). `./x.sh` and
+`x.sh` are the same anchor; a bare extension like `.d.ts` is not one.
 ```bash
 python3 kb-staleness.py                          # report the backlog, newest-overdue last
 KB_STALE_DAYS=7 python3 kb-staleness.py --fail-on-stale   # gate a pre-session hook
 python3 kb-staleness.py --age-only               # skip the anchor check
 ```
-Env: `KB_ROOT`, `KB_VAULT`, `KB_REPOS`, `KB_STALE_DAYS`, `KB_TODAY`. A project with a GitHub-PR
+Env: `KB_ROOT`, `KB_VAULT`, `KB_REPOS` (default: `repos/` if present, else the root), `KB_STALE_DAYS`,
+`KB_TODAY`. A project with a GitHub-PR
 convention can layer a `gh pr view` drift check on top in its own `_meta/`.
 
 ## kb-session-start.sh — the cold-start orientation print

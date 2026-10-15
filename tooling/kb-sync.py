@@ -13,6 +13,7 @@ CONFIG (env vars, all optional — sensible defaults; any of them except KB_ROOT
   KB_MEMORY_DIR Claude Code project-memory dir (tier-1 auto-load)         (default: derived from KB_ROOT)
   KB_PROJECT    project name used in titles                               (default: basename of KB_ROOT)
   KB_TODAY      date stamp written into generated `updated:` fields       (default: today, ISO)
+  KB_LIVE_MAX   warn when the LIVE tier lists more items than this         (default: 30)
   KB_PLATFORMS  comma-separated platforms to generate context files for   (default: claude,codex,gemini,cursor)
                   claude → MEMORY.md + CLAUDE.md LIVE blocks
                   codex  → AGENTS.md        (also read by Antigravity ≥ v1.20.3)
@@ -380,6 +381,18 @@ if __name__ == "__main__":
     # a tool they told not to touch Claude.
     if "claude" in PLATFORMS and not CHECK: sync_claude_md(s, t)
     check_orphans()
+    # The always-loaded tier is only useful while it's small: every agent reads all of it, every
+    # session. Nothing stopped it growing to 80 items and multi-KB status-log titles. Warn; never fail.
+    _live = [i for i in s if is_open_finding(i)] + [i for i in t if i.get("status") == "active"]
+    _live_max = int(os.environ.get("KB_LIVE_MAX") or 30)
+    _long = [i["name"] for i in _live
+             if len((i.get("live_summary") or i.get("title", "")).strip().strip('"')) > 300]
+    if not CHECK and len(_live) > _live_max:
+        print(f"  ⚠️  LIVE tier lists {len(_live)} items (budget {_live_max}, KB_LIVE_MAX) — resolve or "
+              "close what's done; every agent reads all of it every session.")
+    if not CHECK and _long:
+        print(f"  ⚠️  {len(_long)} LIVE line(s) over 300 chars (e.g. [[{_long[0]}]]) — set a short "
+              "`live_summary:`; a title that grows into a status log ends up contradicting its body.")
     if CHECK:
         if _stale:
             print("⚠ kb-sync --check: generated file(s) stale — run `python3 kb-sync.py`:")
