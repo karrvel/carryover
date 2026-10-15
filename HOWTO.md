@@ -149,11 +149,9 @@ KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py   # one run, Claude + Gemini
 export KB_PLATFORMS="claude,codex"                    # or set it for the whole shell / profile
 ```
 
-Setting it in `.githooks/kb.env` is *not* enough on its own: that file is sourced only by the
-pre-commit hook's own shell (and a variable there reaches python only if it is `export`ed), and the
-hook runs `kb-sync.py --check`, which never writes. Put `export KB_PLATFORMS=…` (the `export` is not
-optional — the scripts are child processes of that shell) in `kb.env` to keep the hook's check
-consistent with your platform choice — but export it in your shell for the runs that generate files.
+For a per-repo setting, put `export KB_PLATFORMS="claude,codex"` in `.githooks/kb.env`. Since 0.6
+every script reads that file itself (parsed, never executed), so manual runs and the hook's
+`--check` agree. A value in the environment still wins over the file.
 
 | Platform | File generated | Notes |
 |---|---|---|

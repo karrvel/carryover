@@ -47,9 +47,9 @@ file, or kb-sync will treat the file as its own and overwrite it on the next run
 
 Control which files are generated with `KB_PLATFORMS` (comma-separated; default
 `claude,codex,gemini,cursor`; surrounding whitespace is tolerated). It is read from the environment
-of the kb-sync run, so it must be exported — e.g.
-`KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py`, or `export`ed in your shell profile; putting
-it in `.githooks/kb.env` only affects hook-triggered runs. `claude` covers both `MEMORY.md` **and**
+of the kb-sync run or from `.githooks/kb.env` (every run reads it; the environment wins) — e.g.
+`export KB_PLATFORMS="claude,codex"` in `kb.env`, or `KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py`
+for one run. `claude` covers both `MEMORY.md` **and**
 the `CLAUDE.md` LIVE blocks.
 Commit `AGENTS.md`, `GEMINI.md`, and `.cursor/rules/kb-context.mdc` to the repo.
 

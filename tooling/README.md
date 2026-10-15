@@ -63,14 +63,13 @@ Swap in the hard `pre-commit` once the vault is clean. It sources `.githooks/kb.
 present, so per-repo settings live there — e.g. `export KB_VOLATILITY="durable,decays-with-code,decays-with-prs,one-shot"`
 for a non-standard dialect, or `KB_SKIP_LINT=1` for a vault that predates this frontmatter schema.
 
-> **`export` in `kb.env`, or the setting is silently ignored.** The hook *sources* `kb.env` into its
-> own shell and then runs the Python scripts as **child processes** — a variable set without `export`
-> never reaches them. Symptom: the gate rejects the exact value your config file permits. So every
-> `KB_*` var read by the **Python** scripts must be exported: `KB_ROOT`, `KB_VAULT`, `KB_PLATFORMS`,
-> `KB_VOLATILITY`, `KB_STATUS`, `KB_TYPES`, `KB_MAX_LINES`, `KB_STRICT`, `KB_STALE_DAYS`, `KB_AREAS`,
-> `KB_PROJECT`, `KB_TODAY`, `KB_MEMORY_DIR`, `KB_REPOS`. Vars the hook's own **shell** reads
-> (`KB_SKIP_LINT`, `KB_CODE_PATHS`, `KB_META`) work either way — exporting them too is harmless, so
-> `export` everything in `kb.env` is the habit that can't bite you.
+> **The Python scripts read `kb.env` themselves** (since 0.6), so a manual
+> `python3 _meta/kb-sync.py` sees the same settings as the hook. They *parse* it — they never execute
+> it: only `KB_NAME=value` / `export KB_NAME="value"` lines count, with no `$VAR` expansion, and
+> anything already set in the environment wins. `KB_ROOT` is the one key they ignore there, because
+> it is what locates `kb.env` in the first place. The hook still sources the file into its own shell
+> for the vars only it reads (`KB_SKIP_LINT`, `KB_CODE_PATHS`, `KB_META`); `export`ing everything
+> remains the habit that works for both.
 
 **Versioning only the vault** (workspace has nested git repos or secrets in `_meta/`): `git init` at
 the workspace root, then drop in the ready whitelist — it tracks the vault, its wiring, and the
@@ -106,8 +105,8 @@ Env: `KB_ROOT`, `KB_VAULT`, `KB_MEMORY_DIR`, `KB_PROJECT`, `KB_TODAY`, `KB_AREAS
 tolerated) picks which context files get generated — `claude` → `MEMORY.md` **and** the `CLAUDE.md`
 LIVE blocks · `codex` → `AGENTS.md` (also read by Antigravity) · `gemini` → `GEMINI.md` ·
 `cursor` → `.cursor/rules/kb-context.mdc`. It is read from the **environment of the kb-sync run**, so
-it must be exported — `KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py`, or `export`ed in your
-shell profile. Setting it in `.githooks/kb.env` only affects hook-triggered runs. The `CLAUDE.md`
+set it per repo in `.githooks/kb.env` (read by every run, manual or hook), or per run —
+`KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py`; the environment wins over `kb.env`. The `CLAUDE.md`
 LIVE blocks need the two `<!-- BEGIN:sync:live-security -->…` / `open-work` marker pairs in the
 project-root `CLAUDE.md`; if there's no `CLAUDE.md` at all, kb-sync **warns** and moves on (exit 0)
 — the blocks are simply not wired until you create it with the two marker pairs.

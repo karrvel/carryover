@@ -210,9 +210,8 @@ Both `echo` branches only *tell you* what to add — they deliberately don't edi
 **`KB_PLATFORMS`** picks which context files get written — comma-separated, default
 `claude,codex,gemini,cursor`, spaces tolerated: `claude` → `MEMORY.md` **and** the `CLAUDE.md` LIVE
 blocks · `codex` → `AGENTS.md` · `gemini` → `GEMINI.md` · `cursor` → `.cursor/rules/kb-context.mdc`.
-kb-sync reads it from its own environment, so export it —
-`KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py`. Setting it in `.githooks/kb.env` only affects
-hook-triggered runs. Drop `codex`, `gemini` or `cursor` *after* its file was generated and that file
+Set it once per repo in `.githooks/kb.env` — every run reads that file, manual or hook — or per run:
+`KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py` (the environment wins). Drop `codex`, `gemini` or `cursor` *after* its file was generated and that file
 stays on disk, frozen at old content — kb-sync warns about the orphan (never deletes it) until you
 delete it yourself or re-enable the platform.
 
@@ -294,8 +293,8 @@ Set up a durable, agent-maintained knowledge base in THIS project using the carr
    ownership marker, so the next run would overwrite the whole file.
    KB_PLATFORMS (default claude,codex,gemini,cursor) maps: claude → MEMORY.md + the CLAUDE.md LIVE
    blocks · codex → AGENTS.md · gemini → GEMINI.md · cursor → .cursor/rules/kb-context.mdc. kb-sync
-   reads it from the environment, so: KB_PLATFORMS=claude,gemini python3 ./_meta/kb-sync.py —
-   .githooks/kb.env only covers hook-triggered runs.
+   reads it from .githooks/kb.env (every run, manual or hook) or the environment, which wins:
+   KB_PLATFORMS=claude,gemini python3 ./_meta/kb-sync.py
 
 10. If this is a git repo, enable the pre-commit health gate — but LOOK FIRST, because
     core.hooksPath replaces .git/hooks entirely and disables any hooks the project already had

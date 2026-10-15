@@ -19,6 +19,27 @@ Usage:   python3 kb-links.py            # internal links only (fast, offline)
 import glob, os, re, sys, urllib.request
 
 ROOT = os.environ.get("KB_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Read <root>/.githooks/kb.env, so a manual run sees the same KB_* settings the pre-commit hook does.
+# Parsed, never executed: `KEY=value` / `export KEY="value"` lines with KB_* keys only. A variable
+# already set in the environment wins. KB_ROOT can't come from this file — it is what locates it.
+def _load_kb_env(root):
+    try:
+        lines = open(os.path.join(root, ".githooks", "kb.env"), errors="ignore").read().splitlines()
+    except OSError:
+        return
+    for ln in lines:
+        m = re.match(r"^\s*(?:export\s+)?(KB_[A-Z0-9_]+)=(.*)$", ln)
+        if not m or m.group(1) == "KB_ROOT":
+            continue
+        v = m.group(2).strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+            v = v[1:-1]
+        else:
+            v = re.split(r"\s+#", v, maxsplit=1)[0].strip()   # unquoted: drop a trailing # comment
+        os.environ.setdefault(m.group(1), v)
+
+_load_kb_env(ROOT)
+
 VAULT = os.environ.get("KB_VAULT") or os.path.join(ROOT, "_knowledge")
 WIKI = re.compile(r"\[\[([^\]\n]+)\]\]")               # single-line only (no diagram spillover)
 MDLINK = re.compile(r"(?<!\!)\[[^\]]*\]\(([^)]+)\)")   # [text](target), skip ![img](...)
