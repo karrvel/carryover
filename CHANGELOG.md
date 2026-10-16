@@ -5,13 +5,12 @@ All notable changes to carryover. Versions track `VERSION` in `tooling/kb-sync.p
 Update an existing install with `python3 _meta/kb-update.py` (see
 [Updating the kit](README.md#updating-the-kit)).
 
-## 0.6 — unreleased
+## 0.6 — 2026-10-16
 
-Not in a release tag yet. Until it is, an existing install pulls this work with
-`python3 _meta/kb-update.py --main`. Most of it comes from a health audit of 26 real vaults built
-with this kit: their *content* held up well against the code, but the operational layer around it
-did not — vaults never committed, gates never wired, a LIVE tier that misreported open work, and a
-PII guard that missed the most common leak. `kb-lint` passed on all 26 of them.
+Most of this release comes from a health audit of 26 real vaults built with this kit: their
+*content* held up well against the code, but the operational layer around it did not — vaults
+never committed, gates never wired, a LIVE tier that misreported open work, and a PII guard that
+missed the most common leak. `kb-lint` passed on all 26 of them.
 
 **Upgrade notes.**
 - After updating, the next `kb-sync` run **changes tracked generated files**: `AGENTS.md`,
@@ -77,7 +76,9 @@ PII guard that missed the most common leak. `kb-lint` passed on all 26 of them.
   **0 tracked files** fails instead of reporting clean; `--full-name` fixes scans from a
   subdirectory, which read the wrong files; the banner no longer asserts the repo is public.
 - **`hooks/pre-push`** finds the scanner in `${KB_META:-_meta}/` as well as `tooling/`, and blocks
-  the push when neither exists.
+  the push when neither exists. A push with no new commits (a tag, or a branch at an
+  already-pushed commit) is no longer rescanned from the root: with identities now scanned, any
+  old leak in history blocked every tag push.
 - Generated `AGENTS.md`, `GEMINI.md`, the Cursor rules and `INDEX.md` use root-relative or
   `~`-collapsed paths instead of absolute home paths (they are tracked files; the kit's own
   pii-scan flagged its own output), and generated footers name the real `_meta/kb-sync.py` path.
