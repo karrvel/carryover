@@ -36,7 +36,7 @@ PII guard that missed the most common leak. `kb-lint` passed on all 26 of them.
 - **`pii-scan.py` scans commit identities.** A `--range` scan now covers author/committer names and
   emails — what `git log` publishes with every commit, and the usual way a personal address reaches
   a public repo. `@users.noreply.github.com` is allowed.
-- **`.pii-allow.local`** — project-specific false positives, gitignored, surviving kit updates.
+- **`.pii-allowlist.local`** — project-specific false positives, gitignored, surviving kit updates.
 - **`KB_LINKS_IGNORE`** (kb-links) — a regex for link targets that aren't local files, e.g.
   tracker-relative links pasted from an issue tracker, which used to fail the hard gate for good.
 - **`KB_LIVE_MAX`** (kb-sync, default 30) — a normal run warns when the LIVE tier outgrows its
@@ -84,7 +84,7 @@ PII guard that missed the most common leak. `kb-lint` passed on all 26 of them.
 - `kb-sync.py` `VERSION` is `0.6`.
 - `template/` points at the public research note instead of a `../research/` path that only
   resolves inside the kit; `setup/embedded.gitignore` keeps `.githooks/kb.env` tracked under a
-  `*.env` rule and ignores `.pii-allow.local`.
+  `*.env` rule and ignores `.pii-allowlist.local`.
 - **`kb-update.py` updates to the newest *release tag*, not the tip of the default branch.** Once
   v0.5 was tagged, the old clone-the-tip behaviour handed users unreleased mid-development scripts
   while both sides still printed "0.5". It now discovers tags with `git ls-remote --tags --refs`,

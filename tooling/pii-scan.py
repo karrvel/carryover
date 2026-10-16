@@ -15,7 +15,7 @@ Scans, in order of what leaks:
            names and emails, the most common way a personal address reaches a public repo
   staged   staged diff added lines         (--staged)
 
-Project-specific false positives go in a `.pii-allow.local` at the repo root (one safe substring
+Project-specific false positives go in a `.pii-allowlist.local` at the repo root (one safe substring
 per line, `#` comments), so they survive kit updates instead of living in this file's ALLOW.
 
 Usage:
@@ -88,8 +88,8 @@ def load_denylist():
     return pats
 
 def load_allow():
-    """Project-specific safe substrings from a LOCAL `.pii-allow.local` at the repo root."""
-    path = os.path.join(repo_root(), ".pii-allow.local")
+    """Project-specific safe substrings from a LOCAL `.pii-allowlist.local` at the repo root."""
+    path = os.path.join(repo_root(), ".pii-allowlist.local")
     if not os.path.exists(path):
         return []
     return [ln.strip() for ln in open(path, errors="ignore")
@@ -183,7 +183,7 @@ def main():
         for where, n, label, snip in hits:
             print(f"    {where}:{n}  [{label}]  {snip}")
         print("\n  Scrub them, or if a hit is a false positive add the safe substring to a")
-        print("  `.pii-allow.local` at the repo root. Bypass once (last resort): git push/commit --no-verify.")
+        print("  `.pii-allowlist.local` at the repo root. Bypass once (last resort): git push/commit --no-verify.")
         return 1
     if n_files == 0 and not rng and "--staged" not in sys.argv:
         # "no PII found" after looking at nothing is a false all-clear — e.g. a repo with no commits

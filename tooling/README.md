@@ -237,7 +237,7 @@ diff, or a commit **range** (messages, lines added anywhere in it, and the **aut
 identities** `git log` publishes). Exits 1 on any match, so it can gate a push. Project-specific
 literals belong in a gitignored local denylist (`.pii-denylist.local` at the repo root, or
 `--denylist` / `$PII_DENYLIST`); project-specific false positives in a gitignored
-`.pii-allow.local` (one safe substring per line) — both survive kit updates, unlike edits to
+`.pii-allowlist.local` (one safe substring per line) — both survive kit updates, unlike edits to
 `ALLOW` in the script. It prints how many tracked files it scanned and treats **0** as a failure
 (a repo with nothing committed has nothing to vouch for). `generic-secret-assign` matches
 `UPPER_SNAKE_SECRET=` env lines, and needs a quoted literal or a digit-bearing ≥12-char value, so
