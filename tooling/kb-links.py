@@ -12,6 +12,8 @@ Three checks, all read-only, stdlib-only:
 Exit 1 if any broken internal link (A or B) is found → wire into pre-commit / CI alongside kb-lint.
 
 CONFIG:  KB_ROOT (default two dirs up) · KB_VAULT (default $KB_ROOT/_knowledge)
+         KB_LINKS_IGNORE  regex; markdown-link targets matching it are not checked as local files
+                          (e.g. tracker-relative links pasted from an issue tracker: `^/[A-Z]+/issues/`)
 Usage:   python3 kb-links.py            # internal links only (fast, offline)
          python3 kb-links.py --urls     # also check external URLs (slow, network)
          python3 kb-links.py --urls --timeout 5
@@ -19,6 +21,28 @@ Usage:   python3 kb-links.py            # internal links only (fast, offline)
 import glob, os, re, sys, urllib.request
 
 ROOT = os.environ.get("KB_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Read <root>/.githooks/kb.env, so a manual run sees the same KB_* settings the pre-commit hook does.
+# Parsed, never executed: `KEY=value` / `export KEY="value"` lines with KB_* keys only. A variable
+# already set in the environment wins. KB_ROOT can't come from this file — it is what locates it.
+def _load_kb_env(root):
+    try:
+        lines = open(os.path.join(root, ".githooks", "kb.env"), errors="ignore").read().splitlines()
+    except OSError:
+        return
+    for ln in lines:
+        m = re.match(r"^\s*(?:export\s+)?(KB_[A-Z0-9_]+)=(.*)$", ln)
+        if not m or m.group(1) == "KB_ROOT":
+            continue
+        v = m.group(2).strip()
+        if v[:1] in ("\"", "'"):                         # quoted: up to the matching quote, so a
+            end = v.find(v[0], 1)                         # trailing `# comment` (or a # inside the
+            v = v[1:end] if end > 0 else v[1:]            # quotes) is handled either way
+        else:
+            v = re.split(r"\s+#", v, maxsplit=1)[0].strip()   # unquoted: drop a trailing # comment
+        os.environ.setdefault(m.group(1), v)
+
+_load_kb_env(ROOT)
+
 VAULT = os.environ.get("KB_VAULT") or os.path.join(ROOT, "_knowledge")
 WIKI = re.compile(r"\[\[([^\]\n]+)\]\]")               # single-line only (no diagram spillover)
 MDLINK = re.compile(r"(?<!\!)\[[^\]]*\]\(([^)]+)\)")   # [text](target), skip ![img](...)
@@ -27,6 +51,10 @@ FENCE = re.compile(r"```.*?```|~~~.*?~~~", re.S)        # fenced code blocks
 INLINE = re.compile(r"`[^`\n]*`")                      # inline code spans
 COMMENT = re.compile(r"<!--.*?-->", re.S)              # HTML comments (scaffold guidance, examples)
 SKIP = {"_SHARD_TEMPLATE.md"}                           # scaffold w/ intentional placeholder links
+# Without an escape hatch, one pasted tracker link (`(/PROJ/issues/PROJ-87)`) fails the hard gate
+# forever, and the only way out was the advisory hook — which then checks nothing.
+_ignore = os.environ.get("KB_LINKS_IGNORE")
+IGNORE = re.compile(_ignore) if _ignore else None
 
 
 def strip_code(txt):
@@ -73,7 +101,7 @@ def check_internal():
                 broken_wiki.append((rel, tgt))
         for m in MDLINK.finditer(txt):
             tgt = m.group(1).strip()
-            if tgt.startswith(("http://", "https://", "#", "mailto:")):
+            if tgt.startswith(("http://", "https://", "#", "mailto:")) or (IGNORE and IGNORE.search(tgt)):
                 continue
             path = tgt.split("#")[0]
             if not path:

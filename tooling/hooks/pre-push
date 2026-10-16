@@ -1,16 +1,25 @@
 #!/bin/sh
-# pre-push — mechanical guard: block pushing PII / private-context to this (public) repo.
-# Runs tooling/pii-scan.py over the tracked tree + the commit MESSAGES being pushed (history is
-# permanent once public). Codified regexes, not inference.
-# Enable per-clone:  git config core.hooksPath tooling/hooks
-#   (or symlink: ln -sf ../../tooling/hooks/pre-push .git/hooks/pre-push)
+# pre-push — mechanical guard: block pushing PII / private-context to a public repo.
+# Runs pii-scan.py over the tracked tree + the commits being pushed: their messages, the lines they
+# add, and their author/committer identities (history is permanent once public). Codified regexes,
+# not inference.
+# Enable per-clone:  git config core.hooksPath tooling/hooks      (the kit repo itself)
+#   or, in a project: copy this file into .githooks/ next to the KB pre-commit — it finds the
+#   scanner in _meta/ (or $KB_META) when there is no tooling/ dir.
 # Bypass once (last resort):  git push --no-verify
 
 ROOT="$(git rev-parse --show-toplevel)"
 PY="$(command -v python3 || command -v python)"
 [ -z "$PY" ] && { echo "✗ pre-push: python3 not found on PATH"; exit 1; }
-SCAN="$ROOT/tooling/pii-scan.py"
-[ -f "$SCAN" ] || exit 0   # scanner absent → nothing to enforce
+SCAN="$ROOT/tooling/pii-scan.py"                                  # the kit repo's own layout
+[ -f "$SCAN" ] || SCAN="${KB_META:-$ROOT/_meta}/pii-scan.py"      # a project that installed the kit
+if [ ! -f "$SCAN" ]; then
+  # Fail CLOSED: this hook exists to stop a leak. Exiting 0 here made a copied hook a silent no-op
+  # in every project (the scanner lives in _meta/, not tooling/), while looking installed.
+  echo "✗ pre-push: pii-scan.py not found (looked in tooling/ and ${KB_META:-_meta}/) — push NOT scanned, so it is blocked."
+  echo "  Copy the kit's tooling/pii-scan.py there, set KB_META, or bypass once: git push --no-verify"
+  exit 1
+fi
 
 Z="0000000000000000000000000000000000000000"
 status=0
@@ -18,11 +27,18 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   [ "$local_sha" = "$Z" ] && continue   # deleting a remote ref → nothing to scan
   if [ "$remote_sha" = "$Z" ]; then
     # new branch on the remote: scan every commit not already on any remote.
-    oldest="$(git rev-list "$local_sha" --not --remotes 2>/dev/null | tail -1)"
+    if ! new="$(git rev-list "$local_sha" --not --remotes 2>/dev/null)"; then
+      echo "✗ pre-push: can't list the commits in $local_ref — push NOT scanned, so it is blocked."
+      status=1; continue
+    fi
+    # Nothing new (a tag, or a branch at an already-pushed commit): those commits were scanned when
+    # they were pushed. Rescanning the whole ancestry here would block on any old leak in history.
+    [ -z "$new" ] && continue
+    oldest="$(printf '%s\n' "$new" | tail -1)"
     # If `oldest` is the root commit, `oldest^` doesn't exist and a `${oldest}^..` range is INVALID
     # — git would error and the scan could pass empty. This is exactly the first-push case (highest
     # stakes). Fall back to `$local_sha` alone (= its whole ancestry) so we scan every commit.
-    if [ -n "$oldest" ] && git rev-parse -q --verify "${oldest}^" >/dev/null 2>&1; then
+    if git rev-parse -q --verify "${oldest}^" >/dev/null 2>&1; then
       RANGE="${oldest}^..${local_sha}"
     else
       RANGE="$local_sha"

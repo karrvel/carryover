@@ -22,6 +22,28 @@ Usage:   python3 kb-fix.py            # repair in place
 import glob, os, re, sys
 
 ROOT = os.environ.get("KB_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Read <root>/.githooks/kb.env, so a manual run sees the same KB_* settings the pre-commit hook does.
+# Parsed, never executed: `KEY=value` / `export KEY="value"` lines with KB_* keys only. A variable
+# already set in the environment wins. KB_ROOT can't come from this file — it is what locates it.
+def _load_kb_env(root):
+    try:
+        lines = open(os.path.join(root, ".githooks", "kb.env"), errors="ignore").read().splitlines()
+    except OSError:
+        return
+    for ln in lines:
+        m = re.match(r"^\s*(?:export\s+)?(KB_[A-Z0-9_]+)=(.*)$", ln)
+        if not m or m.group(1) == "KB_ROOT":
+            continue
+        v = m.group(2).strip()
+        if v[:1] in ("\"", "'"):                         # quoted: up to the matching quote, so a
+            end = v.find(v[0], 1)                         # trailing `# comment` (or a # inside the
+            v = v[1:end] if end > 0 else v[1:]            # quotes) is handled either way
+        else:
+            v = re.split(r"\s+#", v, maxsplit=1)[0].strip()   # unquoted: drop a trailing # comment
+        os.environ.setdefault(m.group(1), v)
+
+_load_kb_env(ROOT)
+
 VAULT = os.environ.get("KB_VAULT") or os.path.join(ROOT, "_knowledge")
 FM_LINE = re.compile(r"^(\w[\w-]*):[ \t]+(.*?)[ \t]*$")   # `key: value` (value non-empty)
 

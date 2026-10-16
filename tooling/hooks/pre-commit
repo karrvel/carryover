@@ -1,7 +1,7 @@
 #!/bin/sh
 # pre-commit — KB vault health gate: kb-fix (auto) → kb-lint (gate) → kb-links (gate) → kb-sync --check (advisory).
 # Runs ONLY when _knowledge/*.md files are staged. Scripts live in _meta/.
-# Enabled via:  git config core.hooksPath .githooks   (one-time per clone — the init script does this automatically)
+# Enabled via:  git config core.hooksPath .githooks   (one-time per clone — a manual step; see HOWTO)
 # Bypass once:  git commit --no-verify
 
 ROOT="$(git rev-parse --show-toplevel)"

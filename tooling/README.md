@@ -63,14 +63,13 @@ Swap in the hard `pre-commit` once the vault is clean. It sources `.githooks/kb.
 present, so per-repo settings live there — e.g. `export KB_VOLATILITY="durable,decays-with-code,decays-with-prs,one-shot"`
 for a non-standard dialect, or `KB_SKIP_LINT=1` for a vault that predates this frontmatter schema.
 
-> **`export` in `kb.env`, or the setting is silently ignored.** The hook *sources* `kb.env` into its
-> own shell and then runs the Python scripts as **child processes** — a variable set without `export`
-> never reaches them. Symptom: the gate rejects the exact value your config file permits. So every
-> `KB_*` var read by the **Python** scripts must be exported: `KB_ROOT`, `KB_VAULT`, `KB_PLATFORMS`,
-> `KB_VOLATILITY`, `KB_STATUS`, `KB_TYPES`, `KB_MAX_LINES`, `KB_STRICT`, `KB_STALE_DAYS`, `KB_AREAS`,
-> `KB_PROJECT`, `KB_TODAY`, `KB_MEMORY_DIR`, `KB_REPOS`. Vars the hook's own **shell** reads
-> (`KB_SKIP_LINT`, `KB_CODE_PATHS`, `KB_META`) work either way — exporting them too is harmless, so
-> `export` everything in `kb.env` is the habit that can't bite you.
+> **The Python scripts read `kb.env` themselves** (since 0.6), so a manual
+> `python3 _meta/kb-sync.py` sees the same settings as the hook. They *parse* it — they never execute
+> it: only `KB_NAME=value` / `export KB_NAME="value"` lines count, with no `$VAR` expansion, and
+> anything already set in the environment wins. `KB_ROOT` is the one key they ignore there, because
+> it is what locates `kb.env` in the first place. The hook still sources the file into its own shell
+> for the vars only it reads (`KB_SKIP_LINT`, `KB_CODE_PATHS`, `KB_META`); `export`ing everything
+> remains the habit that works for both.
 
 **Versioning only the vault** (workspace has nested git repos or secrets in `_meta/`): `git init` at
 the workspace root, then drop in the ready whitelist — it tracks the vault, its wiring, and the
@@ -101,13 +100,15 @@ Idempotent.
 python3 kb-sync.py
 KB_ROOT=/path/to/project KB_PROJECT=myproj KB_TODAY=2026-07-05 python3 kb-sync.py
 ```
-Env: `KB_ROOT`, `KB_VAULT`, `KB_MEMORY_DIR`, `KB_PROJECT`, `KB_TODAY`, `KB_AREAS`, `KB_PLATFORMS`.
+Env: `KB_ROOT`, `KB_VAULT`, `KB_MEMORY_DIR`, `KB_PROJECT`, `KB_TODAY`, `KB_AREAS`, `KB_PLATFORMS`,
+`KB_LIVE_MAX` (default 30 — a normal run warns when the LIVE tier lists more items than this, or
+when a LIVE line runs past 300 chars; it never fails).
 `KB_PLATFORMS` (comma-separated; default `claude,codex,gemini,cursor`; whitespace around items is
 tolerated) picks which context files get generated — `claude` → `MEMORY.md` **and** the `CLAUDE.md`
 LIVE blocks · `codex` → `AGENTS.md` (also read by Antigravity) · `gemini` → `GEMINI.md` ·
 `cursor` → `.cursor/rules/kb-context.mdc`. It is read from the **environment of the kb-sync run**, so
-it must be exported — `KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py`, or `export`ed in your
-shell profile. Setting it in `.githooks/kb.env` only affects hook-triggered runs. The `CLAUDE.md`
+set it per repo in `.githooks/kb.env` (read by every run, manual or hook), or per run —
+`KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py`; the environment wins over `kb.env`. The `CLAUDE.md`
 LIVE blocks need the two `<!-- BEGIN:sync:live-security -->…` / `open-work` marker pairs in the
 project-root `CLAUDE.md`; if there's no `CLAUDE.md` at all, kb-sync **warns** and moves on (exit 0)
 — the blocks are simply not wired until you create it with the two marker pairs.
@@ -140,6 +141,14 @@ Validates every shard's frontmatter: required fields present; `type`/`status`/`v
 canonical (catches `decays-with-prs` vs `decays-with-code`, off-schema `done`/`complete`); dates
 well-formed; names unique + kebab-case; no unfilled template placeholders; **and no unquoted values
 that break Obsidian's YAML** (see `kb-fix`). Exit 1 on any ERROR — wire into pre-commit / CI.
+
+It also **warns** (never fails, unless `KB_STRICT=1`) about things that misroute the tooling: a
+shard with frontmatter outside the collections and `reference/` (e.g. an `ops/` folder — INDEX, MOCs,
+lint and staleness never see it); `status: active` with `volatility: one-shot`; an active shard
+whose `live_summary` opens with resolved/superseded/fixed/done/closed; `log.md` headings that don't
+match `## [YYYY-MM-DD] kind | summary`; and a vault `README.md` that still holds template text or was
+copied from the kit's own dogfood vault. A vault running `KB_STRICT=1` will start failing on these
+after an upgrade — that is the point, but fix or relax before you update.
 ```bash
 python3 kb-lint.py                                            # report + gate
 KB_STRICT=1 python3 kb-lint.py                                # warnings fail too
@@ -169,24 +178,32 @@ broken internal links → pre-commit / CI.
 ```bash
 python3 kb-links.py            # internal links only (fast, offline)
 python3 kb-links.py --urls     # also HEAD-check external URLs (slow, network; advisory-only)
+KB_LINKS_IGNORE='^/[A-Z]+/issues/' python3 kb-links.py   # skip targets matching a regex
 ```
-Env: `KB_ROOT`, `KB_VAULT`.
+Env: `KB_ROOT`, `KB_VAULT`, `KB_LINKS_IGNORE` (a regex; markdown-link targets it matches aren't
+checked as local files — for tracker-relative links pasted from an issue tracker, which would
+otherwise fail the hard gate forever).
 
 ## kb-staleness.py — the re-verify queue
 Surfaces the one discipline every vault skips: volatile (`decays-*`) shards whose `updated:` is older
 than the threshold (they must be re-checked against code before an agent trusts them), plus
-backtick-quoted source paths that no longer exist under `repos/` (code that moved out from under a
-shard). Read-only.
+backtick-quoted source paths that no longer exist under the code root (code that moved out from
+under a shard). Read-only. It reads the five collections, `reference/` and `architecture.md`. The
+code root is `KB_REPOS`, else `repos/` when it exists (workspace layout), else the project root
+(embedded layout — before 0.6 the anchor check silently skipped every embedded vault). `./x.sh` and
+`x.sh` are the same anchor; a bare extension like `.d.ts` is not one.
 ```bash
 python3 kb-staleness.py                          # report the backlog, newest-overdue last
 KB_STALE_DAYS=7 python3 kb-staleness.py --fail-on-stale   # gate a pre-session hook
 python3 kb-staleness.py --age-only               # skip the anchor check
 ```
-Env: `KB_ROOT`, `KB_VAULT`, `KB_REPOS`, `KB_STALE_DAYS`, `KB_TODAY`. A project with a GitHub-PR
+Env: `KB_ROOT`, `KB_VAULT`, `KB_REPOS` (default: `repos/` if present, else the root), `KB_STALE_DAYS`,
+`KB_TODAY`. A project with a GitHub-PR
 convention can layer a `gh pr view` drift check on top in its own `_meta/`.
 
 ## kb-session-start.sh — the cold-start orientation print
-POSIX `sh`, no Python: prints every **active** gotcha (`[[name]] — title`, skipping `resolved` /
+POSIX `sh`: first runs `kb-doctor.py --brief` when it's next to it (prints nothing for a healthy
+vault; needs `python3`), then prints every **active** gotcha (`[[name]] — title`, skipping `resolved` /
 `superseded`) plus the open tasks, so a fresh session sees the traps before it touches code. Cheap
 enough to run every session.
 ```bash
@@ -196,18 +213,39 @@ KB_VAULT=/path/to/_knowledge sh _meta/kb-session-start.sh
 Env: `KB_VAULT` (default `$repo-root/_knowledge`). Install it alongside the Python scripts — the
 `cp` above copies `tooling/*.sh` too — then wire it wherever your agent reads a first action (a
 `SessionStart` hook, or a "First action every session" line in `CLAUDE.md` / `AGENTS.md`).
-Note `kb-update.py` only refreshes `*.py`, so re-copy this one by hand when you pull a new kit.
+`kb-update.py` refreshes it along with the `*.py` scripts (since 0.6).
+
+## kb-doctor.py — is the vault actually protected?
+The content gates (kb-lint, kb-links, kb-sync --check) all pass on a vault that was never committed,
+has no gate wired, or was just rolled back by an editor — and the gate itself only runs on commit.
+kb-doctor checks that operational layer, read-only: git repo / HEAD / vault tracked / uncommitted
+vault work and its age / remote; `core.hooksPath` **and** a hook file behind it; `_meta/` ignored;
+`.githooks/kb.env` not swallowed by a `*.env` ignore; CLAUDE.md markers; MEMORY.md at the derived
+memory dir; and a rollback heuristic (net vault deletion ≥200 lines and >3× the additions vs HEAD, or
+any shard whose `updated:` is older than at HEAD).
+```bash
+python3 _meta/kb-doctor.py           # full report
+python3 _meta/kb-doctor.py --brief   # problems only, silent when healthy (kb-session-start.sh uses this)
+python3 _meta/kb-doctor.py --fail    # exit 1 on any problem — for CI or a wrapper script
+```
+Env: `KB_ROOT`, `KB_VAULT`, `KB_MEMORY_DIR`, `KB_PLATFORMS` (as kb-sync; also read from `kb.env`).
 
 ## pii-scan.py — mechanical private-context guard (for a repo that goes public)
 A fixed list of codified regexes — session URLs, `/Users/…` home paths, emails, private keys, AWS /
-GitHub / OpenAI-style tokens — over tracked file **contents**, **commit messages** in a range, or the
-**staged** diff. Exits 1 on any match, so it can gate a push. Project-specific literals belong in a
-gitignored local denylist (`.pii-denylist.local` at the repo root, or `--denylist` / `$PII_DENYLIST`)
-— never committed.
+GitHub / OpenAI-style tokens, secret assignments — over tracked file **contents**, the **staged**
+diff, or a commit **range** (messages, lines added anywhere in it, and the **author/committer
+identities** `git log` publishes). Exits 1 on any match, so it can gate a push. Project-specific
+literals belong in a gitignored local denylist (`.pii-denylist.local` at the repo root, or
+`--denylist` / `$PII_DENYLIST`); project-specific false positives in a gitignored
+`.pii-allowlist.local` (one safe substring per line) — both survive kit updates, unlike edits to
+`ALLOW` in the script. It prints how many tracked files it scanned and treats **0** as a failure
+(a repo with nothing committed has nothing to vouch for). `generic-secret-assign` matches
+`UPPER_SNAKE_SECRET=` env lines, and needs a quoted literal or a digit-bearing ≥12-char value, so
+type annotations and `x = os.environ.get(...)` don't trip it.
 ```bash
 python3 tooling/pii-scan.py                             # all tracked files
 python3 tooling/pii-scan.py --staged                    # staged additions (pre-commit)
-python3 tooling/pii-scan.py --range origin/main..HEAD   # + the commit messages you're about to push
+python3 tooling/pii-scan.py --range origin/main..HEAD   # + messages, added lines, identities you're about to push
 ```
 Exit 0 = clean, 1 = matches, 2 = aborted because a `git` command failed (e.g. an invalid `--range`)
 — it fails closed, so a 2 is never "clean". `hooks/pre-push` runs it automatically over the tree
@@ -216,16 +254,19 @@ Exit 0 = clean, 1 = matches, 2 = aborted because a `git` command failed (e.g. an
 git config core.hooksPath tooling/hooks      # per clone; bypass once with git push --no-verify
 ```
 To use it in a project that already points `core.hooksPath` at `.githooks/`, copy `hooks/pre-push`
-there (`chmod +x`) alongside the KB `pre-commit` — and note it resolves the scanner at
-`<repo-root>/tooling/pii-scan.py` and **exits 0 silently if that file is missing**, so put the script
-there (or edit the `SCAN=` line to wherever you keep it) or the guard won't actually run.
+there (`chmod +x`) alongside the KB `pre-commit`. It looks for the scanner at
+`<repo-root>/tooling/pii-scan.py`, then `${KB_META:-<repo-root>/_meta}/pii-scan.py`, and **blocks the
+push** if neither exists — a guard that can't run must not look like one that passed.
 
 ## kb-update.py — pull new kit versions
 
 Updates the top-level `tooling/*.py` scripts copied into `_meta/` to the **newest release tag** of the
-public repo (or whatever ref you ask for — see below) — **not** `hooks/`, **not** `kb-eval/`, **not**
-`*.sh` (re-copy those by hand). Never touches `_knowledge/`. The `kb.version` pin file is written
-**only** when every offered script was applied, and **never** by `--check`.
+public repo (or whatever ref you ask for — see below), plus the `*.sh` helpers and — when the
+project has one — `.githooks/pre-commit` (matched to the hard or advisory variant you installed;
+never installed if absent). **Not** `kb-eval/`, and never `_knowledge/`. The installed version is
+read from `kb-sync.py`'s own `VERSION`; the `kb.version` pin is only a fallback, written **only**
+when every offered file was applied, and **never** by `--check`. A target **older** than the
+installed version is refused (exit 2, nothing written) unless you named it with `--ref`.
 
 ```bash
 python3 kb-update.py            # interactive — colored diff per file, [y]es/[n]o/[a]ll/[q]uit

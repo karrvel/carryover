@@ -14,7 +14,7 @@ Plain-markdown, git-trackable, Obsidian-compatible knowledge, distilled from the
 past AI-agent sessions. Design = **Karpathy's "LLM wiki"** (compile once, don't re-derive) +
 **MemGPT/Letta two-tier memory** (tiny always-loaded core + on-demand vault). Deliberately **shallow
 and plain-markdown — no vector/spatial RAG** (unnecessary below ~150–200 pages; see
-`../research/plain-markdown-vs-vector-rag.md`).
+[the kit's research note](https://github.com/karrvel/carryover/blob/main/research/plain-markdown-vs-vector-rag.md)).
 
 ## Two-tier memory (how a future agent should use this)
 1. **Core (always-loaded):** Claude Code project memory `MEMORY.md` — the index that auto-loads.
@@ -47,11 +47,12 @@ file, or kb-sync will treat the file as its own and overwrite it on the next run
 
 Control which files are generated with `KB_PLATFORMS` (comma-separated; default
 `claude,codex,gemini,cursor`; surrounding whitespace is tolerated). It is read from the environment
-of the kb-sync run, so it must be exported — e.g.
-`KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py`, or `export`ed in your shell profile; putting
-it in `.githooks/kb.env` only affects hook-triggered runs. `claude` covers both `MEMORY.md` **and**
+of the kb-sync run or from `.githooks/kb.env` (every run reads it; the environment wins) — e.g.
+`export KB_PLATFORMS="claude,codex"` in `kb.env`, or `KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py`
+for one run. `claude` covers both `MEMORY.md` **and**
 the `CLAUDE.md` LIVE blocks.
-Commit `AGENTS.md`, `GEMINI.md`, and `.cursor/rules/kb-context.mdc` to the repo.
+Commit whichever of `AGENTS.md`, `GEMINI.md` and `.cursor/rules/kb-context.mdc` your `KB_PLATFORMS`
+generates.
 
 **Orphan guard.** Removing `codex`, `gemini` or `cursor` from `KB_PLATFORMS` stops kb-sync *writing*
 that project-root file; it does not remove a file already written. The leftover stays on disk — and,

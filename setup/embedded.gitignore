@@ -16,8 +16,12 @@
 # carryover tooling — disposable local copy, never publish
 _meta/
 
-# PII denylist — machine-specific, never commit
+# the KB settings file must stay tracked, even under a blanket `*.env` rule above
+!.githooks/kb.env
+
+# PII denylist / allowlist — machine-specific, never commit
 .pii-denylist.local
+.pii-allowlist.local
 
 # Cursor MCP server config — can hold API tokens, never commit
 # (.cursor/rules/ stays tracked — it's kb-sync output)

@@ -1,5 +1,5 @@
 # Obsidian Bases view over this vault (the "structured view layer without a DB" — see
-# ../research/plain-markdown-vs-vector-rag.md). Open in Obsidian 1.7+ with the Bases core plugin.
+# https://github.com/karrvel/carryover/blob/main/research/plain-markdown-vs-vector-rag.md). Open in Obsidian 1.7+ with the Bases core plugin.
 # Views filter on the default `type` enum. If you set KB_TYPES, edit the `value:` lines below to match.
 views:
   - type: table

@@ -22,9 +22,14 @@ Exit codes:
   0  nothing to do, or scripts applied      2  usage error, git ls-remote or git clone failed
   1  updates exist (--check) / aborted      3  interactive run with no terminal on stdin
 
-What gets updated: only the *.py scripts in the same directory as this file (your _meta/ or
-tooling/ copy). The template/ scaffold (your _knowledge/ contents) is NEVER touched — it's
-init-only and belongs to your project, not the kit.
+What gets updated: the *.py and *.sh scripts in the same directory as this file (your _meta/ or
+tooling/ copy), plus the project's .githooks/pre-commit when one exists next to that directory (the
+hard or advisory variant, whichever you installed). Each is shown as a diff and offered like any
+other file. The template/ scaffold (your _knowledge/ contents) is NEVER touched — it's init-only and
+belongs to your project, not the kit.
+
+Downgrades are refused: if the target's version is older than the installed kb-sync.py's, kb-update
+stops (exit 2) unless you named the ref yourself with --ref.
 """
 import difflib, os, re, shutil, subprocess, sys, tempfile, textwrap, time
 
@@ -35,16 +40,20 @@ VERSION_FILE = "kb.version"    # written next to this script after a successful 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _current_version(script_dir: str) -> str:
-    """Read the pinned version written by a previous update, or detect from kb-sync.py."""
-    vf = os.path.join(script_dir, VERSION_FILE)
-    if os.path.exists(vf):
-        return open(vf).read().strip()
-    # fallback: parse VERSION = "x.y" from kb-sync.py
+    """The installed version: kb-sync.py's own VERSION, else the kb.version pin, else "unknown".
+
+    kb-sync.py is what actually runs, so it is the truth. The pin is only a fallback: a pin file
+    goes stale whenever scripts are copied by hand rather than through kb-update, and reading it
+    first made kb-update report (and compare against) a version that wasn't installed.
+    """
     ks = os.path.join(script_dir, "kb-sync.py")
     if os.path.exists(ks):
         m = re.search(r'^VERSION\s*=\s*["\']([^"\']+)', open(ks).read(), re.M)
         if m:
             return m.group(1)
+    vf = os.path.join(script_dir, VERSION_FILE)
+    if os.path.exists(vf):
+        return open(vf).read().strip() or "unknown"
     return "unknown"
 
 def _remote_version(kit_tool_dir: str) -> str:
@@ -278,10 +287,25 @@ def main() -> int:
         print(f"           |  remote version:  {_colour(remote_ver, '32')}")
         print()
 
-        # collect *.py files present in the kit's tooling/
+        # downgrade guard: a release older than what's installed would silently undo fixes.
+        # Only an explicit --ref may go backwards — that is a deliberate pin, not a default.
+        cur_key, rem_key = _version_key(current_ver), _version_key(remote_ver)
+        if cur_key and rem_key and rem_key < cur_key and not ref:
+            print(_colour(f"Error: {target_label} is version {remote_ver}, older than the installed "
+                          f"{current_ver} — refusing to downgrade.", "31"))
+            print("  Nothing was changed. Installed from the development branch? Use --main.")
+            print("  To go back on purpose, name the ref: --ref <tag-or-branch>.")
+            return 2
+        if cur_key and cur_key == rem_key and not (ref or use_main):
+            print(_colour(f"Note: installed and target are both {current_ver}, but the scripts may "
+                          "differ — an install from --main can be ahead of the release. Read the diffs "
+                          "before applying.", "33"))
+            print()
+
+        # collect *.py and *.sh files present in the kit's tooling/
         kit_scripts = sorted(
             f for f in os.listdir(kit_tool_dir)
-            if f.endswith(".py") and os.path.isfile(os.path.join(kit_tool_dir, f))
+            if f.endswith((".py", ".sh")) and os.path.isfile(os.path.join(kit_tool_dir, f))
         )
 
         changed, new_files = [], []
@@ -291,6 +315,19 @@ def main() -> int:
             diff = _unified_diff(local, remote, name)
             if diff:
                 (new_files if not os.path.exists(local) else changed).append((name, local, remote, diff))
+
+        # The project's pre-commit hook lives at <root>/.githooks/, outside this dir, and used to be
+        # left at whatever version was first copied — so hook fixes never reached anyone. Offer it
+        # when it exists (never install one that isn't there), matched to the variant in use.
+        hook = os.path.join(os.path.dirname(script_dir), ".githooks", "pre-commit")
+        if os.path.isfile(hook):
+            variant = "pre-commit-advisory" if "(ADVISORY)" in open(hook, errors="ignore").read(400) \
+                else "pre-commit"
+            remote = os.path.join(kit_tool_dir, "hooks", variant)
+            if os.path.isfile(remote):
+                diff = _unified_diff(hook, remote, ".githooks/pre-commit")
+                if diff:
+                    changed.append((".githooks/pre-commit", hook, remote, diff))
 
         if not changed and not new_files:
             print(_colour("✓ Already up to date.", "32"))

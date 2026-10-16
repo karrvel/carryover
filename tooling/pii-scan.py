@@ -9,9 +9,14 @@ and NEVER committed — pass it via --denylist or $PII_DENYLIST, or drop a `.pii
 repo root (one entry per line; `#` comments; a line is a regex if it starts with `re:` else literal).
 
 Scans, in order of what leaks:
-  files    tracked file contents           (default: `git ls-files`)
-  commits  commit messages in a range      (--range BASE..HEAD, or via the pre-push hook)
+  files    tracked file contents           (default: `git ls-files`, under the current dir)
+  commits  in a range (--range BASE..HEAD, or via the pre-push hook): messages, lines added
+           anywhere in the range, and author/committer identities — `git log` publishes
+           names and emails, the most common way a personal address reaches a public repo
   staged   staged diff added lines         (--staged)
+
+Project-specific false positives go in a `.pii-allowlist.local` at the repo root (one safe substring
+per line, `#` comments), so they survive kit updates instead of living in this file's ALLOW.
 
 Usage:
   python3 tooling/pii-scan.py                      # scan all tracked files
@@ -39,14 +44,20 @@ PATTERNS = [
     ("api-key-sk",           re.compile(r"\bsk-[A-Za-z0-9][A-Za-z0-9_-]{19,}")),
     ("slack-token",          re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
     ("google-api-key",       re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
-    # secret-looking assignment; value need NOT be quoted (`TOKEN=abc…` and `key: abc…` both count).
-    ("generic-secret-assign", re.compile(r"(?i)\b(?:api[_-]?key|secret|password|passwd|token)\b\s*[:=]\s*['\"]?[^\s'\"]{8,}")),
+    # secret-looking assignment. The key may end an UPPER_SNAKE name (`JWT_SECRET=`, `BOT_TOKEN=`) —
+    # `\b` never fires after `_`, which hid every env-file secret. The value must be a quoted literal
+    # (≥8), or an unquoted ≥12-char token containing a digit that isn't a call — so code like
+    # `password: string`, `token = token.strip()`, `password = os.environ.get(...)` stays quiet.
+    ("generic-secret-assign", re.compile(
+        r"(?i)(?<![A-Za-z0-9])(?:api[_-]?key|secret|password|passwd|token)\b['\"]?\s*[:=]\s*"
+        r"(?:['\"][^'\"\s]{8,}['\"]|(?![A-Za-z_][\w.]*\s*\()(?=[^\s'\"(),;]*\d)[^\s'\"(),;]{12,})")),
     ("email",                re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
 ]
 # Known-safe substrings that suppress a match on the SAME line (avoid false positives). Extend freely.
 ALLOW = [
     # generic no-reply / example addresses
-    "noreply@anthropic.com", "noreply@github.com", "@example.com", "@example.org",
+    "noreply@anthropic.com", "noreply@github.com", "@users.noreply.github.com",
+    "@example.com", "@example.org",
     "user@host", "you@example", "name@example", "<email>", "example@",
     # git SSH host (public, appears in clone commands)
     "git@github.com", "git@gitlab.com",
@@ -75,6 +86,14 @@ def load_denylist():
         else:
             pats.append(("denylist-literal", re.compile(re.escape(s), re.I)))
     return pats
+
+def load_allow():
+    """Project-specific safe substrings from a LOCAL `.pii-allowlist.local` at the repo root."""
+    path = os.path.join(repo_root(), ".pii-allowlist.local")
+    if not os.path.exists(path):
+        return []
+    return [ln.strip() for ln in open(path, errors="ignore")
+            if ln.strip() and not ln.strip().startswith("#")]
 
 def opt(flag):
     if flag in sys.argv:
@@ -115,11 +134,15 @@ def scan_text(text, patterns, where, hits):
 
 def main():
     patterns = PATTERNS + load_denylist()
+    ALLOW.extend(load_allow())
     root = repo_root()
     hits = []
 
-    # 1. tracked files (default surface)
-    for rel in git("ls-files").splitlines():
+    # 1. tracked files (default surface). --full-name: from a subdirectory (a vault nested in a
+    #    bigger repo), plain `ls-files` prints cwd-relative paths, and joining those onto the repo
+    #    root read the WRONG files — a clean report for files that were never looked at.
+    n_files = 0
+    for rel in git("ls-files", "--full-name").splitlines():
         if SKIP_PATH.search(rel):
             continue
         p = os.path.join(root, rel)
@@ -128,6 +151,7 @@ def main():
                 raw = fh.read()
             if b"\x00" in raw[:4096]:
                 continue  # binary
+            n_files += 1
             scan_text(raw.decode("utf-8", "ignore"), patterns, rel, hits)
         except OSError:
             continue
@@ -143,6 +167,10 @@ def main():
         added = "\n".join(l[1:] for l in diff.splitlines()
                           if l.startswith("+") and not l.startswith("+++"))
         scan_text(added, patterns, f"range {rng} (added lines in history)", hits)
+        # author/committer identity — pushed with every commit and shown by any `git log`
+        idents = git("log", "--format=%an <%ae>%n%cn <%ce>", rng)
+        scan_text("\n".join(sorted(set(idents.splitlines()))), patterns,
+                  f"range {rng} (author/committer identity)", hits)
 
     # 3. staged additions
     if "--staged" in sys.argv:
@@ -151,13 +179,19 @@ def main():
         scan_text(added, patterns, "staged diff", hits)
 
     if hits:
-        print(f"✗ pii-scan: {len(hits)} potential leak(s) — BLOCKED (this repo goes public):\n")
+        print(f"✗ pii-scan: {len(hits)} potential leak(s) — BLOCKED:\n")
         for where, n, label, snip in hits:
             print(f"    {where}:{n}  [{label}]  {snip}")
-        print("\n  Scrub them, or if a hit is a false positive add the safe substring to ALLOW in")
-        print("  tooling/pii-scan.py. Bypass once (last resort): git push/commit --no-verify.")
+        print("\n  Scrub them, or if a hit is a false positive add the safe substring to a")
+        print("  `.pii-allowlist.local` at the repo root. Bypass once (last resort): git push/commit --no-verify.")
         return 1
-    print("✓ pii-scan: no PII / private-context patterns found.")
+    if n_files == 0 and not rng and "--staged" not in sys.argv:
+        # "no PII found" after looking at nothing is a false all-clear — e.g. a repo with no commits
+        print("✗ pii-scan: 0 tracked files scanned — nothing is committed here yet, so there is "
+              "nothing to vouch for.")
+        return 1
+    print(f"✓ pii-scan: no PII / private-context patterns found ({n_files} tracked file(s)"
+          + (f", range {rng}" if rng else "") + ").")
     return 0
 
 if __name__ == "__main__":

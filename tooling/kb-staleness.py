@@ -10,7 +10,11 @@ Two checks:
   (A) AGE      — every volatile shard (volatility contains "decays") whose `updated:` is older than
                  KB_STALE_DAYS is flagged, newest-overdue last. This is the re-verify queue.
   (B) ANCHORS  — backtick-quoted source paths (`pkg/foo.ts`, `src/x.py:42`) that no longer exist
-                 under $KB_ROOT/repos/ — a strong signal the shard describes code that moved.
+                 under the code root — a strong signal the shard describes code that moved. The code
+                 root is $KB_REPOS, else $KB_ROOT/repos/ (workspace layout), else $KB_ROOT itself
+                 (embedded layout: the code sits next to the vault).
+
+Shards are read from the five collections, reference/ and architecture.md.
 
 Portable stdlib-only. A project with a GitHub-PR convention can layer a `gh pr view`
 drift check on top; that part is project-specific and lives in the project's own _meta/.
@@ -18,7 +22,7 @@ drift check on top; that part is project-specific and lives in the project's own
 CONFIG (env, all optional):
   KB_ROOT       project root (default: two dirs up from this file)
   KB_VAULT      vault dir                    (default: $KB_ROOT/_knowledge)
-  KB_REPOS      code checkout dir for anchors (default: $KB_ROOT/repos)
+  KB_REPOS      code root for anchors          (default: $KB_ROOT/repos if it exists, else $KB_ROOT)
   KB_STALE_DAYS age threshold in days         (default: 14)
   KB_TODAY      YYYY-MM-DD override for age math (default: real today)
 
@@ -32,10 +36,39 @@ Usage:  python3 kb-staleness.py
 import datetime, glob, os, re, sys
 
 ROOT = os.environ.get("KB_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Read <root>/.githooks/kb.env, so a manual run sees the same KB_* settings the pre-commit hook does.
+# Parsed, never executed: `KEY=value` / `export KEY="value"` lines with KB_* keys only. A variable
+# already set in the environment wins. KB_ROOT can't come from this file — it is what locates it.
+def _load_kb_env(root):
+    try:
+        lines = open(os.path.join(root, ".githooks", "kb.env"), errors="ignore").read().splitlines()
+    except OSError:
+        return
+    for ln in lines:
+        m = re.match(r"^\s*(?:export\s+)?(KB_[A-Z0-9_]+)=(.*)$", ln)
+        if not m or m.group(1) == "KB_ROOT":
+            continue
+        v = m.group(2).strip()
+        if v[:1] in ("\"", "'"):                         # quoted: up to the matching quote, so a
+            end = v.find(v[0], 1)                         # trailing `# comment` (or a # inside the
+            v = v[1:end] if end > 0 else v[1:]            # quotes) is handled either way
+        else:
+            v = re.split(r"\s+#", v, maxsplit=1)[0].strip()   # unquoted: drop a trailing # comment
+        os.environ.setdefault(m.group(1), v)
+
+_load_kb_env(ROOT)
+
 VAULT = os.environ.get("KB_VAULT") or os.path.join(ROOT, "_knowledge")
-REPOS = os.environ.get("KB_REPOS") or os.path.join(ROOT, "repos")
+# Embedded vaults have no repos/ — their code is the project root. Defaulting to repos/ there
+# silently skipped the anchor check in every embedded install ("no code checkout at repos").
+REPOS = os.environ.get("KB_REPOS") or (os.path.join(ROOT, "repos")
+                                       if os.path.isdir(os.path.join(ROOT, "repos")) else ROOT)
 STALE_DAYS = int(os.environ.get("KB_STALE_DAYS", "14"))
 COLLECTIONS = ["gotchas", "decisions", "security", "tasks", "repos"]
+# reference/ holds runbooks and data snapshots that are often the fastest-decaying facts in a vault;
+# a `volatility: decays-*` tag there means exactly what it means anywhere else.
+SCANNED = COLLECTIONS + ["reference"]
+SKIP_DIRS = {".git", "node_modules", "dist", "build", "target", ".venv", "venv", "__pycache__"}
 # backtick-quoted source paths worth anchor-checking (≥1 dir segment + a code-ish extension)
 ANCHOR_RE = re.compile(r"`([A-Za-z0-9_./\-]+\.(?:ts|tsx|js|jsx|rs|py|go|sh|toml|yaml|yml|sql|rb|"
                        r"java|kt|swift|c|h|cpp|json))(?::\d+)?`")
@@ -72,7 +105,7 @@ def repo_file_index():
     if not os.path.isdir(REPOS):
         return idx
     for dp, dns, fns in os.walk(REPOS):
-        dns[:] = [d for d in dns if d not in (".git", "node_modules", "dist", "build", "target")]
+        dns[:] = [d for d in dns if d not in SKIP_DIRS]
         for fn in fns:
             idx.setdefault(fn, []).append(os.path.join(dp, fn))
     return idx
@@ -86,7 +119,7 @@ def main():
     age_only = "--age-only" in sys.argv
 
     files = []
-    for c in COLLECTIONS:
+    for c in SCANNED:
         files += sorted(glob.glob(os.path.join(VAULT, c, "*.md")))
     arch = os.path.join(VAULT, "architecture.md")
     if os.path.exists(arch):
@@ -97,6 +130,8 @@ def main():
     n_volatile = 0
     anchor_texts = {}     # rel -> body (only for volatile shards, for the anchor pass)
 
+    where = "the project root" if os.path.realpath(REPOS) == os.path.realpath(ROOT) \
+        else os.path.relpath(REPOS, ROOT) + "/"
     for f in files:
         rel = os.path.relpath(f, ROOT)
         fm, body = parse(f)
@@ -133,12 +168,16 @@ def main():
         print("\n(B) ANCHOR CHECK — source paths cited in volatile shards that no longer exist")
         idx = repo_file_index()
         if not idx:
-            print(f"  (no code checkout at {os.path.relpath(REPOS, ROOT)} — skipping)")
+            print(f"  (no code under {os.path.relpath(REPOS, ROOT)} — skipping; set KB_REPOS)")
         else:
             hits = []
             for rel, body in anchor_texts.items():
                 for m in ANCHOR_RE.finditer(body):
                     path = m.group(1)
+                    while path.startswith("./"):     # `./deploy.sh` is the same file as `deploy.sh`
+                        path = path[2:]
+                    if "/" not in path and path.startswith("."):
+                        continue                      # a bare extension like `.d.ts`, not a file path
                     base = os.path.basename(path)
                     cands = idx.get(base, [])
                     # exists if some indexed file ends with the cited path (suffix match)
@@ -154,7 +193,7 @@ def main():
             if not uniq:
                 print("  ✓ every cited source path still exists")
             for rel, path in uniq:
-                print(f"  ⚠️  {rel}  →  `{path}` not found under repos/")
+                print(f"  ⚠️  {rel}  →  `{path}` not found under {where}")
 
     print(f"\n{len(overdue)} overdue, {len(undated_volatile)} undated-volatile, "
           f"{n_missing_anchors} missing anchor(s).")

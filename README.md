@@ -72,7 +72,7 @@ Stdlib-only Python 3 — no dependencies, nothing to install.
 | | |
 |---|---|
 | **`template/`** | the vault scaffold you copy in as `_knowledge/` |
-| **`tooling/`** | `kb-sync` (shards → navigation + memory) · `kb-lint` (schema gate) · `kb-fix` (Obsidian-safe frontmatter) · `kb-links` (link-rot gate) · `kb-staleness` (re-verify queue) · `kb-update` (pull new versions) · `prefilter` (transcripts → digests) · `hooks/` · `kb-eval/` |
+| **`tooling/`** | `kb-sync` (shards → navigation + memory) · `kb-lint` (schema gate) · `kb-fix` (Obsidian-safe frontmatter) · `kb-links` (link-rot gate) · `kb-staleness` (re-verify queue) · `kb-doctor` (committed? gated? rolled back?) · `kb-update` (pull new versions) · `prefilter` (transcripts → digests) · `hooks/` · `kb-eval/` |
 | **`setup/`** | ready `.gitignore` for each layout below |
 | **`research/`** | the fact-checked *why* |
 | **Docs** | [HOWTO](HOWTO.md) · [AGENTS](AGENTS.md) · [CHANGELOG](CHANGELOG.md) · [SECURITY](SECURITY.md) · [LICENSE](LICENSE.md) |
@@ -156,6 +156,11 @@ git config core.hooksPath .githooks     # ⚠ see below if this repo already has
 #    _knowledge/README.md ({PROJECT}/TODO), then generate navigation:
 python3 _meta/kb-sync.py && python3 _meta/kb-fix.py \
   && python3 _meta/kb-lint.py && python3 _meta/kb-links.py
+
+# 3. Commit it — the gate only runs on commit, and an uncommitted vault is an unprotected one —
+#    then confirm the setup (read-only; aim for '0 problem(s). healthy ✓'):
+git add -A && git commit -m "kb: initial vault"
+python3 _meta/kb-doctor.py
 ```
 
 <details>
@@ -210,9 +215,8 @@ Both `echo` branches only *tell you* what to add — they deliberately don't edi
 **`KB_PLATFORMS`** picks which context files get written — comma-separated, default
 `claude,codex,gemini,cursor`, spaces tolerated: `claude` → `MEMORY.md` **and** the `CLAUDE.md` LIVE
 blocks · `codex` → `AGENTS.md` · `gemini` → `GEMINI.md` · `cursor` → `.cursor/rules/kb-context.mdc`.
-kb-sync reads it from its own environment, so export it —
-`KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py`. Setting it in `.githooks/kb.env` only affects
-hook-triggered runs. Drop `codex`, `gemini` or `cursor` *after* its file was generated and that file
+Set it once per repo in `.githooks/kb.env` — every run reads that file, manual or hook — or per run:
+`KB_PLATFORMS=claude,gemini python3 _meta/kb-sync.py` (the environment wins). Drop `codex`, `gemini` or `cursor` *after* its file was generated and that file
 stays on disk, frozen at old content — kb-sync warns about the orphan (never deletes it) until you
 delete it yourself or re-enable the platform.
 
@@ -294,8 +298,8 @@ Set up a durable, agent-maintained knowledge base in THIS project using the carr
    ownership marker, so the next run would overwrite the whole file.
    KB_PLATFORMS (default claude,codex,gemini,cursor) maps: claude → MEMORY.md + the CLAUDE.md LIVE
    blocks · codex → AGENTS.md · gemini → GEMINI.md · cursor → .cursor/rules/kb-context.mdc. kb-sync
-   reads it from the environment, so: KB_PLATFORMS=claude,gemini python3 ./_meta/kb-sync.py —
-   .githooks/kb.env only covers hook-triggered runs.
+   reads it from .githooks/kb.env (every run, manual or hook) or the environment, which wins:
+   KB_PLATFORMS=claude,gemini python3 ./_meta/kb-sync.py
 
 10. If this is a git repo, enable the pre-commit health gate — but LOOK FIRST, because
     core.hooksPath replaces .git/hooks entirely and disables any hooks the project already had
@@ -344,9 +348,10 @@ python3 _meta/kb-update.py --ref v0.5   # pin to an explicit tag, branch or sha
 
 By default it updates to the **newest release tag** — versions are ordered numerically, so `v0.10`
 outranks `v0.9`, and non-version tags are ignored. A repo with no release tags falls back to the
-default branch with a one-line note. The run header prints the ref it used. Only the top-level
-`tooling/*.py` in `_meta/` are updated — not the `*.sh` helpers, not `hooks/`, not `kb-eval/`.
-Your `_knowledge/` vault is never touched.
+default branch with a one-line note. The run header prints the ref it used. It updates the
+`tooling/*.py` and `*.sh` scripts in `_meta/` and, if the project has one, `.githooks/pre-commit`
+(each shown as a diff first) — not `kb-eval/`. A target older than what's installed is refused
+unless you pin it with `--ref`. Your `_knowledge/` vault is never touched.
 
 > [!WARNING]
 > Silent mode skips the diff review. Run interactive at least once on a new version before using
