@@ -108,7 +108,9 @@ def repo_root():
         return os.getcwd()
 
 def git(*args):
-    r = subprocess.run(["git", *args], capture_output=True, text=True)
+    # Decode leniently, as the tracked-file pass does: a staged or pushed non-UTF-8 file (latin-1,
+    # cp1251…) crashed a strict decode. Skipping it would hide the ASCII email/path/key it carries.
+    r = subprocess.run(["git", *args], capture_output=True, encoding="utf-8", errors="ignore")
     if r.returncode != 0:
         # FAIL CLOSED: a git error (e.g. an invalid range on a first/root-commit push) must never
         # be mistaken for "clean". Abort loudly so the guard blocks instead of passing empty output.

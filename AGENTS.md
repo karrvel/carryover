@@ -56,6 +56,9 @@ from transcripts.
 You're editing the template, tooling, or research here. Rules:
 - **Tooling is stdlib-only Python 3** (no deps) and idempotent. Keep it that way. Each script derives
   `KB_ROOT` as two dirs up from itself and honors `KB_*` env overrides.
+- **Run the tooling tests after changing a script:** `python3 -m unittest discover -s tooling/tests -v`
+  from the kit root (stdlib `unittest`, throwaway temp repos/vaults). `tooling/tests/` is never
+  copied into a project's `_meta/` — `cp tooling/*.py` and `kb-update` take top-level scripts only.
 - **The scripts are the contract.** Frontmatter schema lives in `template/_SHARD_TEMPLATE.md` +
   `template/README.md`; `kb-lint.py` enforces it; `kb-sync.py` reads it to generate navigation. Change
   one, change all three consistently.

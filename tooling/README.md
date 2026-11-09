@@ -248,7 +248,8 @@ python3 tooling/pii-scan.py --staged                    # staged additions (pre-
 python3 tooling/pii-scan.py --range origin/main..HEAD   # + messages, added lines, identities you're about to push
 ```
 Exit 0 = clean, 1 = matches, 2 = aborted because a `git` command failed (e.g. an invalid `--range`)
-— it fails closed, so a 2 is never "clean". `hooks/pre-push` runs it automatically over the tree
+— it fails closed, so a 2 is never "clean". Content that isn't valid UTF-8 (a latin-1 or cp1251
+file, staged or in a pushed commit) is decoded leniently and still scanned, never skipped. `hooks/pre-push` runs it automatically over the tree
 *and* the commits being pushed (history is permanent once public). In a clone of this kit:
 ```bash
 git config core.hooksPath tooling/hooks      # per clone; bypass once with git push --no-verify
