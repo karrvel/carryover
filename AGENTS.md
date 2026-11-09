@@ -10,6 +10,9 @@ empty/fresh and brownfield projects. In short: copy `template/` → the project'
 `tooling/*.py` **and** `tooling/*.sh` → its `_meta/`, wire the `CLAUDE.md` LIVE markers, mine all
 three raw sources below (skeleton-first, verify against code), then run
 `kb-sync → kb-fix → kb-lint → kb-links`.
+If the target has no git — a design-tool workspace (Figma, Miro, `.pen` files) — don't force this
+flow onto it; use the lighter convention in
+[`research/non-git-design-projects.md`](research/non-git-design-projects.md).
 
 If the target project already has its own root `AGENTS.md` (or `GEMINI.md` / `.cursor/rules/kb-context.mdc`),
 `kb-sync.py` will **not** clobber it: any such file it didn't write itself is reported with a warning

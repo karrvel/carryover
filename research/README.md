@@ -23,6 +23,10 @@ Companion page (added 2026-08-27), on the *other* half of the problem — in-ses
 
 8. [[agent-context-management]] — offload-plus-pointer, usage-anchored token accounting, cache hygiene on auxiliary calls, pluggable summarization, and a compaction-budget arithmetic trap that silently disables compaction on small-context models.
 
+A convention page (added 2026-11-09) for projects the full git-based kit doesn't fit:
+
+9. [[non-git-design-projects]] — design-tool workspaces with no git: Claude Code memory format, API-gotcha focus, node-ID verification on read, no `log.md` or hook, and naming the active project at session start.
+
 ## The takeaway in three lines
 - **Build:** a two-tier, plain-markdown, git-versioned, agent-maintained wiki (Karpathy + MemGPT).
 - **Skip:** vector/graph/spatial RAG until you exceed ~150–200 pages / ~50–100k tokens.
