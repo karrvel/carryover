@@ -202,6 +202,8 @@ python3 kb-staleness.py                          # report the backlog, newest-ov
 KB_STALE_DAYS=7 python3 kb-staleness.py --fail-on-stale   # gate a pre-session hook
 python3 kb-staleness.py --age-only               # skip the anchor check
 ```
+To run it on a timer — a `make kb-stale` target, or a weekly cron line that prints only when
+something is overdue — see HOWTO.md §7 *Maintain*.
 Env: `KB_ROOT`, `KB_VAULT`, `KB_REPOS` (default: `repos/` if present, else the root), `KB_STALE_DAYS`,
 `KB_TODAY`. A project with a GitHub-PR
 convention can layer a `gh pr view` drift check on top in its own `_meta/`.
