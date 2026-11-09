@@ -216,6 +216,12 @@ outside the repo (in the Claude Code project-memory dir) and is never committed.
   **not** across sibling repos. So a workspace-root `MEMORY.md` auto-loads only for root sessions;
   the `CLAUDE.md` LIVE blocks are what reach the individual repos. (This is why we mirror the LIVE
   tier into `CLAUDE.md`, not only `MEMORY.md`.)
+- **The flip side: memory follows the repo root, not the file you're editing.** In a non-git folder
+  or a workspace holding several projects (common with design tools — Figma, Miro, `.pen` files),
+  one memory dir serves all of them and surfaces another project's facts as if they were this one's.
+  No tooling can re-key it, so the generated `AGENTS.md` / `GEMINI.md` / Cursor rule tell the agent
+  to **name the active project explicitly at session start**. Lighter convention for such
+  workspaces: [`research/non-git-design-projects.md`](research/non-git-design-projects.md).
 - HTML comments (`<!-- … -->`) are stripped from `CLAUDE.md` before it enters context, so the
   `BEGIN/END:sync` markers cost nothing and the content between two markers still loads.
 
