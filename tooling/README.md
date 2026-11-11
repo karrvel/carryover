@@ -146,8 +146,13 @@ It also **warns** (never fails, unless `KB_STRICT=1`) about things that misroute
 shard with frontmatter outside the collections and `reference/` (e.g. an `ops/` folder — INDEX, MOCs,
 lint and staleness never see it); `status: active` with `volatility: one-shot`; an active shard
 whose `live_summary` opens with resolved/superseded/fixed/done/closed; `log.md` headings that don't
-match `## [YYYY-MM-DD] kind | summary`; and a vault `README.md` that still holds template text or was
-copied from the kit's own dogfood vault. A vault running `KB_STRICT=1` will start failing on these
+match `## [YYYY-MM-DD] kind | summary`; a vault `README.md` that still holds template text or was
+copied from the kit's own dogfood vault; and a `provenance:` that cites a file path existing nowhere
+under the project root — the code moved out from under the shard, or the shard describes a different
+codebase. That last one is a weak signal: only tokens ending in a known file extension are treated as
+paths (dates, hashes, `repo@sha`, URLs, globs and absolute paths never are); a path resolves from the
+project root, from the vault, or as the tail of any file or directory under the root. A deliberate
+citation of something outside the project (upstream source, a file in your home dir) warns too. A vault running `KB_STRICT=1` will start failing on these
 after an upgrade — that is the point, but fix or relax before you update.
 ```bash
 python3 kb-lint.py                                            # report + gate
@@ -197,6 +202,8 @@ python3 kb-staleness.py                          # report the backlog, newest-ov
 KB_STALE_DAYS=7 python3 kb-staleness.py --fail-on-stale   # gate a pre-session hook
 python3 kb-staleness.py --age-only               # skip the anchor check
 ```
+To run it on a timer — a `make kb-stale` target, or a weekly cron line that prints only when
+something is overdue — see HOWTO.md §7 *Maintain*.
 Env: `KB_ROOT`, `KB_VAULT`, `KB_REPOS` (default: `repos/` if present, else the root), `KB_STALE_DAYS`,
 `KB_TODAY`. A project with a GitHub-PR
 convention can layer a `gh pr view` drift check on top in its own `_meta/`.
@@ -248,7 +255,8 @@ python3 tooling/pii-scan.py --staged                    # staged additions (pre-
 python3 tooling/pii-scan.py --range origin/main..HEAD   # + messages, added lines, identities you're about to push
 ```
 Exit 0 = clean, 1 = matches, 2 = aborted because a `git` command failed (e.g. an invalid `--range`)
-— it fails closed, so a 2 is never "clean". `hooks/pre-push` runs it automatically over the tree
+— it fails closed, so a 2 is never "clean". Content that isn't valid UTF-8 (a latin-1 or cp1251
+file, staged or in a pushed commit) is decoded leniently and still scanned, never skipped. `hooks/pre-push` runs it automatically over the tree
 *and* the commits being pushed (history is permanent once public). In a clone of this kit:
 ```bash
 git config core.hooksPath tooling/hooks      # per clone; bypass once with git push --no-verify

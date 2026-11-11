@@ -10,6 +10,9 @@ empty/fresh and brownfield projects. In short: copy `template/` → the project'
 `tooling/*.py` **and** `tooling/*.sh` → its `_meta/`, wire the `CLAUDE.md` LIVE markers, mine all
 three raw sources below (skeleton-first, verify against code), then run
 `kb-sync → kb-fix → kb-lint → kb-links`.
+If the target has no git — a design-tool workspace (Figma, Miro, `.pen` files) — don't force this
+flow onto it; use the lighter convention in
+[`research/non-git-design-projects.md`](research/non-git-design-projects.md).
 
 If the target project already has its own root `AGENTS.md` (or `GEMINI.md` / `.cursor/rules/kb-context.mdc`),
 `kb-sync.py` will **not** clobber it: any such file it didn't write itself is reported with a warning
@@ -56,6 +59,9 @@ from transcripts.
 You're editing the template, tooling, or research here. Rules:
 - **Tooling is stdlib-only Python 3** (no deps) and idempotent. Keep it that way. Each script derives
   `KB_ROOT` as two dirs up from itself and honors `KB_*` env overrides.
+- **Run the tooling tests after changing a script:** `python3 -m unittest discover -s tooling/tests -v`
+  from the kit root (stdlib `unittest`, throwaway temp repos/vaults). `tooling/tests/` is never
+  copied into a project's `_meta/` — `cp tooling/*.py` and `kb-update` take top-level scripts only.
 - **The scripts are the contract.** Frontmatter schema lives in `template/_SHARD_TEMPLATE.md` +
   `template/README.md`; `kb-lint.py` enforces it; `kb-sync.py` reads it to generate navigation. Change
   one, change all three consistently.

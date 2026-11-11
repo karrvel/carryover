@@ -216,6 +216,12 @@ outside the repo (in the Claude Code project-memory dir) and is never committed.
   **not** across sibling repos. So a workspace-root `MEMORY.md` auto-loads only for root sessions;
   the `CLAUDE.md` LIVE blocks are what reach the individual repos. (This is why we mirror the LIVE
   tier into `CLAUDE.md`, not only `MEMORY.md`.)
+- **The flip side: memory follows the repo root, not the file you're editing.** In a non-git folder
+  or a workspace holding several projects (common with design tools — Figma, Miro, `.pen` files),
+  one memory dir serves all of them and surfaces another project's facts as if they were this one's.
+  No tooling can re-key it, so the generated `AGENTS.md` / `GEMINI.md` / Cursor rule tell the agent
+  to **name the active project explicitly at session start**. Lighter convention for such
+  workspaces: [`research/non-git-design-projects.md`](research/non-git-design-projects.md).
 - HTML comments (`<!-- … -->`) are stripped from `CLAUDE.md` before it enters context, so the
   `BEGIN/END:sync` markers cost nothing and the content between two markers still loads.
 
@@ -234,6 +240,22 @@ Append to `log.md` per session. Cap the always-loaded core (~30 items). Keep the
 **The rule everyone skips is `decays-with-code` re-verification — so `kb-staleness.py` exists to make
 that backlog visible; wire it into a pre-session or weekly nudge, and `kb-fix` + `kb-lint` +
 `kb-links` + `kb-sync.py --check` into a pre-commit hook.** Put the volatility discipline on a timer, not on willpower.
+
+**Put it on a timer.** `kb-staleness.py --fail-on-stale` exits 1 when a volatile shard is past
+`KB_STALE_DAYS` (default 14), has no valid `updated:`, or cites a source path that is gone — so
+anything that reacts to an exit code can carry it. A make target (recipe lines start with a tab):
+```make
+.PHONY: kb-stale
+kb-stale:   ## fail when volatile knowledge is overdue for re-verification
+	python3 _meta/kb-staleness.py --fail-on-stale
+```
+Or a weekly cron line (Monday 09:00). Cron mails whatever a job prints, so this prints only when the
+re-verify queue is non-empty; add `--age-only` if the code isn't checked out where the job runs, and
+use the full path to `python3` if cron's `PATH` doesn't have it:
+```cron
+0 9 * * 1  cd /path/to/project && out=$(python3 _meta/kb-staleness.py --fail-on-stale) || echo "$out"
+```
+In a CI pipeline, the same command is a scheduled job step — a non-zero exit fails the run.
 
 **Browse it as a database:** the scaffold ships `knowledge-map.base` — open the vault in Obsidian
 (1.7+) for filtered table views per `type`. It's purely additive: Obsidian users get the view layer,

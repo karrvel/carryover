@@ -5,6 +5,43 @@ All notable changes to carryover. Versions track `VERSION` in `tooling/kb-sync.p
 Update an existing install with `python3 _meta/kb-update.py` (see
 [Updating the kit](README.md#updating-the-kit)).
 
+## Unreleased
+
+**Upgrade notes.**
+- The next `kb-sync` run **changes tracked generated files**: `AGENTS.md`, `GEMINI.md` and
+  `.cursor/rules/kb-context.mdc` gain a third *Cold start* step. Until you re-run it, the hook's
+  advisory `kb-sync --check` reports them as stale. Commit that diff.
+- `kb-lint` has a new **warning**. It never fails a commit unless you run `KB_STRICT=1`, in which
+  case a vault with a dangling provenance path starts failing.
+
+### Added
+- **`kb-lint` warns when a `provenance:` cites a path that exists nowhere under the project root**
+  — the code moved out from under the shard, or the shard describes a different codebase (a "ghost
+  stack"). Most provenance is dates, hashes and prose, so only tokens ending in a known file
+  extension are treated as paths; URLs (with or without a scheme), `repo@sha`, globs, `host:/path`,
+  absolute and home paths are never checked. A path resolves from the root, from the vault, or as
+  the tail of any file or directory under the root. Validated read-only on five real vaults (162
+  path tokens): 4 warnings — 1 real (code moved out of the project), 3 deliberate citations of
+  files outside it (upstream source, a note in the agent's memory dir).
+- **Generated agent files tell the agent to name the active project at session start** in a
+  non-git or multi-project workspace, where one memory dir serves several projects. HOWTO §6
+  explains why (memory follows the repo root, not the open file).
+- **`research/non-git-design-projects.md`** — a minimal convention for design-tool workspaces with
+  no git (Figma, Miro, `.pen` files): Claude Code memory format, notes about the tool's API rather
+  than the design, node IDs verified on every read, no `log.md` or hook. AGENTS.md points init
+  agents at it for git-less targets.
+- **HOWTO §7: `kb-staleness --fail-on-stale` on a timer** — a `make kb-stale` target and a weekly
+  cron line that prints only when the re-verify queue is non-empty.
+- **`tooling/tests/`** — stdlib `unittest` regression tests for `pii-scan` and the new `kb-lint`
+  check: `python3 -m unittest discover -s tooling/tests -v`. Not copied into `_meta/`.
+
+### Fixed
+- **`pii-scan.py --staged` crashed with `UnicodeDecodeError`** on a staged file that isn't UTF-8
+  (latin-1, cp1251…), and `--range` — the pre-push path — crashed the same way on such a file in a
+  pushed commit. git's output is now decoded leniently and still scanned, never skipped: the
+  patterns are ASCII, so an email or token in a non-UTF-8 file is still caught. Valid UTF-8 scans
+  exactly as before.
+
 ## 0.6 — 2026-10-16
 
 Most of this release comes from a health audit of 26 real vaults built with this kit: their

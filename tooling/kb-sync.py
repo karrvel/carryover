@@ -279,7 +279,10 @@ def _agent_body(sec, tsk, heading="agent quick-start"):
     body = [f"# {PROJECT} — {heading}\n", GEN,
             "\n## Cold start",
             f"1. `cat {_disp(os.path.join(VAULT, 'INDEX.md'))}` — browse the map, open only what you need.",
-            "2. Check LIVE sections below for open security findings and active work.\n",
+            "2. Check LIVE sections below for open security findings and active work.",
+            "3. In a non-git or multi-project workspace, name the active project explicitly at "
+            "session start — memory keyed to a repo root or a shared folder can surface another "
+            "project's facts.\n",
             "## Vault location",
             f"`{_disp(VAULT)}` — plain markdown, frontmatter-tagged shards.\n",
             f"## 🔴 LIVE — open security findings ({len(live_sec)}) — verify before acting"] + \

@@ -6,6 +6,9 @@ Companion to kb-sync.py. Where kb-sync *reads* frontmatter to generate navigatio
 *validates* it: required fields present, enum values canonical (no `decays-with-prs` vs
 `decays-with-code`, no off-schema `done`/`complete` status), dates well-formed, names unique +
 kebab-case, and no unfilled template placeholders left behind. Idempotent, read-only, stdlib-only.
+It also WARNS when a `provenance:` cites a file path that exists nowhere under KB_ROOT — the code
+moved, or the shard describes a different codebase. Only tokens ending in a known file extension
+count; dates, hashes, `repo@sha`, URLs, globs and absolute/home paths are never treated as paths.
 
 Exit code 0 = clean, 1 = at least one ERROR (wire it into a pre-commit / CI hook to hold the line).
 
@@ -76,6 +79,14 @@ KIT_NAMES = {"kb-template", "agent-kb", "carryover"}
 CLOSED_WORDS = re.compile(r"^\W*(resolved|superseded|fixed|done|closed)\b", re.I)
 KEBAB = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# provenance tokens checked as paths: only ones ending in a known file extension. Dates, hashes,
+# `repo@sha`, URLs, globs, absolute/home and `host:/path` tokens are never paths here.
+PATH_EXT = re.compile(r"\.(?:md|mdc|txt|rst|pdf|csv|jsonl?|ya?ml|toml|ini|cfg|conf|xml|plist|html?|"
+                      r"css|scss|py|sh|ts|tsx|js|jsx|mjs|cjs|rs|go|rb|java|kt|swift|c|h|cpp|sql|"
+                      r"prisma|tf|lock)$", re.I)
+NOT_A_PATH = re.compile(r"://|[@*?{}<>$=:\\]|^\.\./|^www\.")
+SKIP_DIRS = {".git", "node_modules", "dist", "build", "target", ".venv", "venv", "__pycache__"}
+_file_index = None   # basename -> [root-relative paths]; built on first need (one walk per run)
 
 
 def _already_quoted(v):
@@ -124,6 +135,40 @@ def valid_date(s):
         return False
     y, mo, d = (int(x) for x in s.split("-"))
     return 1 <= mo <= 12 and 1 <= d <= 31
+
+
+def provenance_paths(value):
+    """The tokens of a provenance value that clearly are relative file paths."""
+    out = []
+    for tok in re.split(r"[\s,;()\[\]\"'`|+]+", value):
+        tok = re.sub(r":\d+(?:-\d+)?$", "", tok.rstrip(".:")).split("#")[0]   # x.py:42, x.md#anchor
+        while tok.startswith("./"):
+            tok = tok[2:]
+        if not tok or NOT_A_PATH.search(tok) or not PATH_EXT.search(tok) or tok[0] in "/~":
+            continue
+        first = tok.split("/")[0]
+        if "/" in tok and "." in first.lstrip("."):
+            continue                                  # host.tld/path — a URL without its scheme
+        if "/" not in tok and (tok.startswith(".") or re.match(r"^[A-Z][A-Za-z0-9]*\.js$", tok)):
+            continue                                  # `.d.ts`, `.env` · `Next.js`, `Node.js`
+        out.append(tok)
+    return out
+
+
+def exists_under_root(tok):
+    """True if tok is a path from KB_ROOT or the vault, or the tail of a file or dir under KB_ROOT."""
+    global _file_index
+    if os.path.exists(os.path.join(ROOT, tok)) or os.path.exists(os.path.join(VAULT, tok)):
+        return True
+    if _file_index is None:
+        _file_index = {}
+        for dp, dns, fns in os.walk(ROOT):
+            dns[:] = [d for d in dns if d not in SKIP_DIRS]
+            for fn in fns + dns:          # dirs too: a route dir like `.well-known/assetlinks.json/`
+                _file_index.setdefault(fn, []).append(
+                    os.path.relpath(os.path.join(dp, fn), ROOT).replace(os.sep, "/"))
+    return any(p == tok or p.endswith("/" + tok)
+               for p in _file_index.get(os.path.basename(tok), []))
 
 
 def main():
@@ -207,6 +252,13 @@ def main():
         for p in PLACEHOLDERS:
             if p in hay:
                 err(f"unfilled template placeholder present: {p!r}")
+
+        # a provenance path that exists nowhere under the root: the code moved, or the shard
+        # describes a different codebase (a "ghost stack"). Weak signal — warn, never fail.
+        for tok in dict.fromkeys(provenance_paths(fm.get("provenance", ""))):
+            if not exists_under_root(tok):
+                warn(f"provenance cites `{tok}`, which exists nowhere under the project root — "
+                     f"moved, renamed, or describing another codebase?")
 
         # status/volatility/summary that contradict each other — each one misroutes the LIVE tier
         if fm.get("status") == "active" and fm.get("volatility") == "one-shot":
